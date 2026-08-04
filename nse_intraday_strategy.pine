@@ -4,25 +4,20 @@ strategy("NSE Intraday Trend Breakout Strategy", overlay=true, initial_capital=1
 // ==========================================
 // INPUTS - STRATEGY PARAMETERS
 // ==========================================
-st_factor = input.float(3.0, "Supertrend Factor", minval=0.5, maxval=10.0, step=0.1, group="Strategy Parameters")
-st_period = input.int(10, "Supertrend ATR Period", minval=1, maxval=100, group="Strategy Parameters")
-ema_fast_len = input.int(9, "Fast EMA Length", minval=1, maxval=50, group="Strategy Parameters")
-ema_slow_len = input.int(21, "Slow EMA Length", minval=1, maxval=100, group="Strategy Parameters")
-ema_filter_len = input.int(200, "EMA Trend Filter Length", minval=10, maxval=500, group="Strategy Parameters")
-
-// Toggle filters to avoid "no trades" on restrictive symbols
-use_ema_filter = input.bool(true, "Use EMA 200 Trend Filter", group="Strategy Parameters")
-use_vwap_filter = input.bool(true, "Use VWAP Filter (Intraday only)", group="Strategy Parameters")
-use_volume_filter = input.bool(false, "Use Volume Filter (above 20 SMA)", group="Strategy Parameters")
+orb_length = input.int(15, "Opening Range Duration (Minutes)", minval=5, maxval=60, step=5, group="Strategy Parameters")
+ema_trend_len = input.int(200, "EMA Trend Filter Length", minval=10, maxval=500, group="Strategy Parameters")
+use_vwap_filter = input.bool(true, "Use VWAP Filter", group="Strategy Parameters")
+use_ema_filter = input.bool(true, "Use EMA Trend Filter", group="Strategy Parameters")
+use_volume_filter = input.bool(true, "Use Volume Confirmation (above 20 SMA)", group="Strategy Parameters")
 
 // ==========================================
 // INPUTS - SESSIONS & TIME WINDOWS
 // ==========================================
 timezone = "Asia/Kolkata"
 entry_start_hour = input.int(9, "Entry Start Hour (IST)", minval=0, maxval=23, group="Session Settings")
-entry_start_min = input.int(20, "Entry Start Minute (IST)", minval=0, maxval=59, group="Session Settings")
-entry_end_hour = input.int(15, "Entry End Hour (IST)", minval=0, maxval=23, group="Session Settings")
-entry_end_min = input.int(0, "Entry End Minute (IST)", minval=0, maxval=59, group="Session Settings")
+entry_start_min = input.int(30, "Entry Start Minute (IST)", minval=0, maxval=59, group="Session Settings")
+entry_end_hour = input.int(14, "Entry End Hour (IST)", minval=0, maxval=23, group="Session Settings")
+entry_end_min = input.int(30, "Entry End Minute (IST)", minval=0, maxval=59, group="Session Settings")
 exit_start_hour = input.int(15, "Forced Exit Hour (IST)", minval=0, maxval=23, group="Session Settings")
 exit_start_min = input.int(15, "Forced Exit Minute (IST)", minval=0, maxval=59, group="Session Settings")
 
@@ -31,7 +26,7 @@ exit_start_min = input.int(15, "Forced Exit Minute (IST)", minval=0, maxval=59, 
 // ==========================================
 risk_pct = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, group="Risk Management")
 leverage = input.float(5.0, "Max Intraday Leverage (X)", minval=1.0, maxval=10.0, step=0.5, group="Risk Management")
-max_daily_trades = input.int(5, "Maximum Daily Trades", minval=1, maxval=20, group="Risk Management")
+max_daily_trades = input.int(1, "Maximum Daily Trades Per Stock", minval=1, maxval=5, group="Risk Management")
 max_daily_loss_pct = input.float(2.0, "Maximum Daily Loss Limit (%)", minval=0.5, maxval=10.0, step=0.1, group="Risk Management")
 max_drawdown_pct = input.float(5.0, "Maximum Drawdown Limit (%)", minval=1.0, maxval=20.0, step=0.5, group="Risk Management")
 
@@ -39,11 +34,12 @@ max_drawdown_pct = input.float(5.0, "Maximum Drawdown Limit (%)", minval=1.0, ma
 // INPUTS - TRADE MANAGEMENT
 // ==========================================
 atr_sl_mult = input.float(1.5, "ATR Stop Loss Multiplier", minval=0.5, maxval=5.0, step=0.1, group="Trade Management")
-rr_ratio = input.float(2.0, "Risk-to-Reward Ratio", minval=0.5, maxval=10.0, step=0.1, group="Trade Management")
+rr_ratio = input.float(2.5, "Risk-to-Reward Ratio", minval=0.5, maxval=10.0, step=0.1, group="Trade Management")
 enable_be = input.bool(true, "Enable Break-even Stop", group="Trade Management")
 be_trigger_mult = input.float(1.0, "Break-even Trigger (SL Multiplier)", minval=0.5, maxval=5.0, step=0.1, group="Trade Management")
 enable_trail = input.bool(true, "Enable Trailing Stop", group="Trade Management")
 trail_atr_mult = input.float(2.0, "Trailing Stop ATR Multiplier", minval=0.5, maxval=5.0, step=0.1, group="Trade Management")
+min_sl_pct = input.float(0.5, "Minimum Stop Loss (% of Price)", minval=0.1, maxval=5.0, step=0.1, group="Trade Management")
 
 // ==========================================
 // INPUTS - VISUAL SETTINGS
@@ -54,16 +50,13 @@ show_bg = input.bool(true, "Show Trend Background Color", group="Visual Settings
 // ==========================================
 // INDICATOR CALCULATIONS (EVALUATED GLOBALLY)
 // ==========================================
-[st_val, st_dir] = ta.supertrend(st_factor, st_period)
-ema_fast = ta.ema(close, ema_fast_len)
-ema_slow = ta.ema(close, ema_slow_len)
-ema200 = ta.ema(close, ema_filter_len)
+ema_trend = ta.ema(close, ema_trend_len)
 vwap_val = ta.vwap
 atr_val = ta.atr(14)
 volume_sma = ta.sma(volume, 20)
 
 // ==========================================
-// TIME WINDOW CHECKS (ROBUST HOUR/MINUTE PARSING)
+// TIME WINDOW CHECKS
 // ==========================================
 is_daily_or_higher = timeframe.isdaily or timeframe.isweekly or timeframe.ismonthly
 
@@ -77,6 +70,31 @@ exit_start_num = exit_start_hour * 100 + exit_start_min
 
 in_entry_window = is_daily_or_higher or (bar_time_num >= entry_start_num and bar_time_num <= entry_end_num)
 in_exit_window = not is_daily_or_higher and (bar_time_num >= exit_start_num)
+
+// ==========================================
+// OPENING RANGE TRACKING
+// ==========================================
+new_day = not na(ta.change(time("D")))
+
+var int session_bar_count = 0
+var float orb_high = na
+var float orb_low = na
+
+if new_day
+    session_bar_count := 0
+    orb_high := na
+    orb_low := na
+
+if not is_daily_or_higher
+    session_bar_count += 1
+    // Keep tracking high and low of the first N minutes of the day
+    // Opening range window ends when timeframe multiplier * session_bar_count exceeds the requested orb_length
+    time_elapsed = session_bar_count * timeframe.multiplier
+    if time_elapsed <= orb_length
+        if na(orb_high) or high > orb_high
+            orb_high := high
+        if na(orb_low) or low < orb_low
+            orb_low := low
 
 // ==========================================
 // STATE VARIABLES FOR TRADE TRACKING
@@ -95,8 +113,6 @@ pos_exited = pos_size == 0 and pos_size[1] != 0
 // ==========================================
 // DAILY STATS & RISK CONTROLS
 // ==========================================
-new_day = not na(ta.change(time("D")))
-
 var int trades_today = 0
 if new_day
     trades_today := 0
@@ -122,7 +138,10 @@ drawdown_limit_exceeded = current_drawdown_pct >= max_drawdown_pct
 // ==========================================
 // DYNAMIC POSITION SIZING
 // ==========================================
-sl_dist_points = atr_val * atr_sl_mult
+raw_sl_dist = atr_val * atr_sl_mult
+min_sl_dist = close * (min_sl_pct / 100.0)
+sl_dist_points = not na(raw_sl_dist) ? math.max(raw_sl_dist, min_sl_dist) : min_sl_dist
+
 sl_points = not na(sl_dist_points) and sl_dist_points > 0 ? sl_dist_points : close * 0.01
 risk_amount = strategy.equity * (risk_pct / 100.0)
 qty_based_on_risk = risk_amount / sl_points
@@ -136,38 +155,31 @@ if final_qty <= 0
 // ==========================================
 vol_ok = not use_volume_filter or volume > volume_sma
 
-// Evaluate triggers globally to prevent lazy evaluation warnings/errors
-st_crossunder_zero = ta.crossunder(st_dir, 0)
-st_crossover_zero = ta.crossover(st_dir, 0)
-ema_crossover_fast_slow = ta.crossover(ema_fast, ema_slow)
-ema_crossunder_fast_slow = ta.crossunder(ema_fast, ema_slow)
-close_crossover_ema_fast = ta.crossover(close, ema_fast)
-close_crossunder_ema_fast = ta.crossunder(close, ema_fast)
+// Evaluate crossover signals globally to avoid lazy-evaluation warnings (CW10002) in Pine Script v6
+orb_high_crossover = ta.crossover(close, orb_high)
+orb_low_crossunder = ta.crossunder(close, orb_low)
 
-// Bullish trend state
-trend_long = (st_dir == -1) and (not use_ema_filter or close > ema200) and (not use_vwap_filter or is_daily_or_higher or close > vwap_val) and vol_ok
-// Bearish trend state
-trend_short = (st_dir == 1) and (not use_ema_filter or close < ema200) and (not use_vwap_filter or is_daily_or_higher or close < vwap_val) and vol_ok
+// Bullish logic: Price breaks out above Opening Range High
+long_entry_signal = not na(orb_high) and orb_high_crossover and (not use_ema_filter or close > ema_trend) and (not use_vwap_filter or close > vwap_val) and vol_ok
+// Bearish logic: Price breaks down below Opening Range Low
+short_entry_signal = not na(orb_low) and orb_low_crossunder and (not use_ema_filter or close < ema_trend) and (not use_vwap_filter or close < vwap_val) and vol_ok
 
-// Multiple entry triggers to ensure high trade activity and compatibility
-long_entry_signal = (st_crossunder_zero or ema_crossover_fast_slow or close_crossover_ema_fast) and trend_long
-short_entry_signal = (st_crossover_zero or ema_crossunder_fast_slow or close_crossunder_ema_fast) and trend_short
-
+// Strictly enforce max trades today & daily risk limits
 can_trade = in_entry_window and trades_today < max_daily_trades and not daily_loss_limit_exceeded and not drawdown_limit_exceeded
 
 // Execute Entries
 if can_trade and pos_size == 0
     if long_entry_signal
-        strategy.entry("Long", strategy.long, qty=final_qty, comment="Long Entry")
+        strategy.entry("Long", strategy.long, qty=final_qty, comment="ORB Buy")
         alert("Buy Alert: Long Entry on " + syminfo.ticker, alert.freq_once_per_bar)
     else if short_entry_signal
-        strategy.entry("Short", strategy.short, qty=final_qty, comment="Short Entry")
+        strategy.entry("Short", strategy.short, qty=final_qty, comment="ORB Sell")
         alert("Sell Alert: Short Entry on " + syminfo.ticker, alert.freq_once_per_bar)
 
 // Set target levels on entry
 if pos_entered
     entry_price := close
-    sl_dist = atr_val * atr_sl_mult
+    sl_dist = sl_dist_points
     tp_dist = sl_dist * rr_ratio
     if pos_size > 0
         sl_price := close - sl_dist
@@ -182,7 +194,7 @@ if pos_entered
 // Update target levels with actual execution price if available
 if pos_size != 0 and not na(strategy.opentrades.entry_price(0))
     entry_price := strategy.opentrades.entry_price(0)
-    sl_dist = atr_val * atr_sl_mult
+    sl_dist = sl_dist_points
     tp_dist = sl_dist * rr_ratio
     if pos_size > 0
         sl_price := entry_price - sl_dist
@@ -252,12 +264,16 @@ if pos_exited
 // ==========================================
 // CHART VISUALS
 // ==========================================
-// EMA 200 Trend Line
-plot(ema200, title="EMA 200 Filter", color=color.blue, linewidth=2)
+// EMA Trend Line
+plot(use_ema_filter ? ema_trend : na, title="EMA Filter Line", color=color.blue, linewidth=2)
 
-// Supertrend Background Shading
-st_color = st_dir == -1 ? color.new(color.green, 95) : color.new(color.red, 95)
-bgcolor(show_bg ? st_color : na, title="Supertrend Trend Shading")
+// Opening Range High / Low Lines
+plot(not na(orb_high) ? orb_high : na, title="ORB High", color=color.new(color.green, 50), linewidth=2, style=plot.style_linebr)
+plot(not na(orb_low) ? orb_low : na, title="ORB Low", color=color.new(color.red, 50), linewidth=2, style=plot.style_linebr)
+
+// Background Trend Shading
+st_color = close > ema_trend ? color.new(color.green, 95) : color.new(color.red, 95)
+bgcolor(show_bg ? st_color : na, title="EMA Trend Shading")
 
 // Entry and Exit Shapes
 plotshape(pos_entered and pos_size > 0, title="Long Entry Marker", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.normal)
