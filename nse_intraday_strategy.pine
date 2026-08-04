@@ -77,7 +77,7 @@ pos_exited = pos_size == 0 and pos_size[1] != 0
 // ==========================================
 // DAILY STATS & RISK CONTROLS
 // ==========================================
-new_day = ta.change(time("D", timezone))
+new_day = not na(ta.change(time("D")))
 
 var int trades_today = 0
 if new_day
@@ -118,10 +118,16 @@ if final_qty <= 0
 // ==========================================
 vol_ok = not use_volume_filter or volume > volume_sma
 
+// Evaluate functions globally to avoid inconsistent calculations inside local/lazy evaluation conditional expressions
+st_crossunder_zero = ta.crossunder(st_dir, 0)
+st_crossover_zero = ta.crossover(st_dir, 0)
+ema_crossover_fast_slow = ta.crossover(ema_fast, ema_slow)
+ema_crossunder_fast_slow = ta.crossunder(ema_fast, ema_slow)
+
 // Bullish triggers: Supertrend flip or EMA cross under Supertrend green state
-long_entry_signal = (ta.crossunder(st_dir, 0) or (st_dir == -1 and ta.crossover(ema_fast, ema_slow))) and close > ema200 and close > vwap_val and vol_ok
+long_entry_signal = (st_crossunder_zero or (st_dir == -1 and ema_crossover_fast_slow)) and close > ema200 and close > vwap_val and vol_ok
 // Bearish triggers: Supertrend flip or EMA cross under Supertrend red state
-short_entry_signal = (ta.crossover(st_dir, 0) or (st_dir == 1 and ta.crossunder(ema_fast, ema_slow))) and close < ema200 and close < vwap_val and vol_ok
+short_entry_signal = (st_crossover_zero or (st_dir == 1 and ema_crossunder_fast_slow)) and close < ema200 and close < vwap_val and vol_ok
 
 can_trade = in_entry_window and trades_today < max_daily_trades and not daily_loss_limit_exceeded and not drawdown_limit_exceeded
 
