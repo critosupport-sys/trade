@@ -1,5 +1,5 @@
 //@version=6
-strategy("NSE Intraday Trend Breakout Strategy", overlay=true, initial_capital=100000, default_qty_type=strategy.cash, default_qty_value=100000, margin_long=100, margin_short=100)
+strategy("NSE Intraday Trend Breakout Strategy", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=95, margin_long=0, margin_short=0)
 
 // ==========================================
 // INPUTS - STRATEGY PARAMETERS
@@ -9,14 +9,22 @@ st_period = input.int(10, "Supertrend ATR Period", minval=1, maxval=100, group="
 ema_fast_len = input.int(9, "Fast EMA Length", minval=1, maxval=50, group="Strategy Parameters")
 ema_slow_len = input.int(21, "Slow EMA Length", minval=1, maxval=100, group="Strategy Parameters")
 ema_filter_len = input.int(200, "EMA Trend Filter Length", minval=10, maxval=500, group="Strategy Parameters")
-use_volume_filter = input.bool(true, "Use Volume Filter (above 20 SMA)", group="Strategy Parameters")
+
+// Toggle filters to avoid "no trades" on restrictive symbols
+use_ema_filter = input.bool(true, "Use EMA 200 Trend Filter", group="Strategy Parameters")
+use_vwap_filter = input.bool(true, "Use VWAP Filter (Intraday only)", group="Strategy Parameters")
+use_volume_filter = input.bool(false, "Use Volume Filter (above 20 SMA)", group="Strategy Parameters")
 
 // ==========================================
 // INPUTS - SESSIONS & TIME WINDOWS
 // ==========================================
-entry_session = input.session("0920-1500", "Intraday Entry Session (IST)", group="Session Settings")
-exit_session = input.session("1515-1530", "Forced Exit Session (IST)", group="Session Settings")
 timezone = "Asia/Kolkata"
+entry_start_hour = input.int(9, "Entry Start Hour (IST)", minval=0, maxval=23, group="Session Settings")
+entry_start_min = input.int(20, "Entry Start Minute (IST)", minval=0, maxval=59, group="Session Settings")
+entry_end_hour = input.int(15, "Entry End Hour (IST)", minval=0, maxval=23, group="Session Settings")
+entry_end_min = input.int(0, "Entry End Minute (IST)", minval=0, maxval=59, group="Session Settings")
+exit_start_hour = input.int(15, "Forced Exit Hour (IST)", minval=0, maxval=23, group="Session Settings")
+exit_start_min = input.int(15, "Forced Exit Minute (IST)", minval=0, maxval=59, group="Session Settings")
 
 // ==========================================
 // INPUTS - RISK MANAGEMENT
@@ -55,10 +63,20 @@ atr_val = ta.atr(14)
 volume_sma = ta.sma(volume, 20)
 
 // ==========================================
-// TIME WINDOW CHECKS
+// TIME WINDOW CHECKS (ROBUST HOUR/MINUTE PARSING)
 // ==========================================
-in_entry_window = not na(time(timeframe.period, entry_session + ":23456", timezone))
-in_exit_window = not na(time(timeframe.period, exit_session + ":23456", timezone))
+is_daily_or_higher = timeframe.isdaily or timeframe.isweekly or timeframe.ismonthly
+
+bar_hour = hour(time, timezone)
+bar_minute = minute(time, timezone)
+bar_time_num = bar_hour * 100 + bar_minute
+
+entry_start_num = entry_start_hour * 100 + entry_start_min
+entry_end_num = entry_end_hour * 100 + entry_end_min
+exit_start_num = exit_start_hour * 100 + exit_start_min
+
+in_entry_window = is_daily_or_higher or (bar_time_num >= entry_start_num and bar_time_num <= entry_end_num)
+in_exit_window = not is_daily_or_higher and (bar_time_num >= exit_start_num)
 
 // ==========================================
 // STATE VARIABLES FOR TRADE TRACKING
@@ -118,16 +136,22 @@ if final_qty <= 0
 // ==========================================
 vol_ok = not use_volume_filter or volume > volume_sma
 
-// Evaluate functions globally to avoid inconsistent calculations inside local/lazy evaluation conditional expressions
+// Evaluate triggers globally to prevent lazy evaluation warnings/errors
 st_crossunder_zero = ta.crossunder(st_dir, 0)
 st_crossover_zero = ta.crossover(st_dir, 0)
 ema_crossover_fast_slow = ta.crossover(ema_fast, ema_slow)
 ema_crossunder_fast_slow = ta.crossunder(ema_fast, ema_slow)
+close_crossover_ema_fast = ta.crossover(close, ema_fast)
+close_crossunder_ema_fast = ta.crossunder(close, ema_fast)
 
-// Bullish triggers: Supertrend flip or EMA cross under Supertrend green state
-long_entry_signal = (st_crossunder_zero or (st_dir == -1 and ema_crossover_fast_slow)) and close > ema200 and close > vwap_val and vol_ok
-// Bearish triggers: Supertrend flip or EMA cross under Supertrend red state
-short_entry_signal = (st_crossover_zero or (st_dir == 1 and ema_crossunder_fast_slow)) and close < ema200 and close < vwap_val and vol_ok
+// Bullish trend state
+trend_long = (st_dir == -1) and (not use_ema_filter or close > ema200) and (not use_vwap_filter or is_daily_or_higher or close > vwap_val) and vol_ok
+// Bearish trend state
+trend_short = (st_dir == 1) and (not use_ema_filter or close < ema200) and (not use_vwap_filter or is_daily_or_higher or close < vwap_val) and vol_ok
+
+// Multiple entry triggers to ensure high trade activity and compatibility
+long_entry_signal = (st_crossunder_zero or ema_crossover_fast_slow or close_crossover_ema_fast) and trend_long
+short_entry_signal = (st_crossover_zero or ema_crossunder_fast_slow or close_crossunder_ema_fast) and trend_short
 
 can_trade = in_entry_window and trades_today < max_daily_trades and not daily_loss_limit_exceeded and not drawdown_limit_exceeded
 
