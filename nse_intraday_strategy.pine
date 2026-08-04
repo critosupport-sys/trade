@@ -1,0 +1,316 @@
+//@version=6
+strategy("NSE Intraday Trend Breakout Strategy", overlay=true, initial_capital=100000, default_qty_type=strategy.cash, default_qty_value=100000, margin_long=100, margin_short=100)
+
+// ==========================================
+// INPUTS - STRATEGY PARAMETERS
+// ==========================================
+st_factor = input.float(3.0, "Supertrend Factor", minval=0.5, maxval=10.0, step=0.1, group="Strategy Parameters")
+st_period = input.int(10, "Supertrend ATR Period", minval=1, maxval=100, group="Strategy Parameters")
+ema_fast_len = input.int(9, "Fast EMA Length", minval=1, maxval=50, group="Strategy Parameters")
+ema_slow_len = input.int(21, "Slow EMA Length", minval=1, maxval=100, group="Strategy Parameters")
+ema_filter_len = input.int(200, "EMA Trend Filter Length", minval=10, maxval=500, group="Strategy Parameters")
+use_volume_filter = input.bool(true, "Use Volume Filter (above 20 SMA)", group="Strategy Parameters")
+
+// ==========================================
+// INPUTS - SESSIONS & TIME WINDOWS
+// ==========================================
+entry_session = input.session("0920-1500", "Intraday Entry Session (IST)", group="Session Settings")
+exit_session = input.session("1515-1530", "Forced Exit Session (IST)", group="Session Settings")
+timezone = "Asia/Kolkata"
+
+// ==========================================
+// INPUTS - RISK MANAGEMENT
+// ==========================================
+risk_pct = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10.0, step=0.1, group="Risk Management")
+leverage = input.float(5.0, "Max Intraday Leverage (X)", minval=1.0, maxval=10.0, step=0.5, group="Risk Management")
+max_daily_trades = input.int(5, "Maximum Daily Trades", minval=1, maxval=20, group="Risk Management")
+max_daily_loss_pct = input.float(2.0, "Maximum Daily Loss Limit (%)", minval=0.5, maxval=10.0, step=0.1, group="Risk Management")
+max_drawdown_pct = input.float(5.0, "Maximum Drawdown Limit (%)", minval=1.0, maxval=20.0, step=0.5, group="Risk Management")
+
+// ==========================================
+// INPUTS - TRADE MANAGEMENT
+// ==========================================
+atr_sl_mult = input.float(1.5, "ATR Stop Loss Multiplier", minval=0.5, maxval=5.0, step=0.1, group="Trade Management")
+rr_ratio = input.float(2.0, "Risk-to-Reward Ratio", minval=0.5, maxval=10.0, step=0.1, group="Trade Management")
+enable_be = input.bool(true, "Enable Break-even Stop", group="Trade Management")
+be_trigger_mult = input.float(1.0, "Break-even Trigger (SL Multiplier)", minval=0.5, maxval=5.0, step=0.1, group="Trade Management")
+enable_trail = input.bool(true, "Enable Trailing Stop", group="Trade Management")
+trail_atr_mult = input.float(2.0, "Trailing Stop ATR Multiplier", minval=0.5, maxval=5.0, step=0.1, group="Trade Management")
+
+// ==========================================
+// INPUTS - VISUAL SETTINGS
+// ==========================================
+table_pos = input.string("bottom_right", "Stats Table Position", options=["top_right", "bottom_right", "top_left", "bottom_left"], group="Visual Settings")
+show_bg = input.bool(true, "Show Trend Background Color", group="Visual Settings")
+
+// ==========================================
+// INDICATOR CALCULATIONS (EVALUATED GLOBALLY)
+// ==========================================
+[st_val, st_dir] = ta.supertrend(st_factor, st_period)
+ema_fast = ta.ema(close, ema_fast_len)
+ema_slow = ta.ema(close, ema_slow_len)
+ema200 = ta.ema(close, ema_filter_len)
+vwap_val = ta.vwap
+atr_val = ta.atr(14)
+volume_sma = ta.sma(volume, 20)
+
+// ==========================================
+// TIME WINDOW CHECKS
+// ==========================================
+in_entry_window = not na(time(timeframe.period, entry_session + ":23456", timezone))
+in_exit_window = not na(time(timeframe.period, exit_session + ":23456", timezone))
+
+// ==========================================
+// STATE VARIABLES FOR TRADE TRACKING
+// ==========================================
+var float entry_price = na
+var float sl_price = na
+var float tp_price = na
+var float trail_sl_price = na
+var bool break_even_triggered = false
+
+// Position tracking
+pos_size = strategy.position_size
+pos_entered = pos_size != 0 and pos_size[1] == 0
+pos_exited = pos_size == 0 and pos_size[1] != 0
+
+// ==========================================
+// DAILY STATS & RISK CONTROLS
+// ==========================================
+new_day = ta.change(time("D", timezone))
+
+var int trades_today = 0
+if new_day
+    trades_today := 0
+
+if pos_entered
+    trades_today += 1
+
+var float start_of_day_equity = na
+if new_day or na(start_of_day_equity)
+    start_of_day_equity := strategy.equity - strategy.openprofit
+
+daily_pnl = strategy.equity - start_of_day_equity
+max_daily_loss_amount = start_of_day_equity * (max_daily_loss_pct / 100.0)
+daily_loss_limit_exceeded = daily_pnl < 0 and math.abs(daily_pnl) >= max_daily_loss_amount
+
+var float peak_equity = 0.0
+if na(peak_equity) or strategy.equity > peak_equity
+    peak_equity := strategy.equity
+
+current_drawdown_pct = ((peak_equity - strategy.equity) / peak_equity) * 100.0
+drawdown_limit_exceeded = current_drawdown_pct >= max_drawdown_pct
+
+// ==========================================
+// DYNAMIC POSITION SIZING
+// ==========================================
+sl_dist_points = atr_val * atr_sl_mult
+sl_points = not na(sl_dist_points) and sl_dist_points > 0 ? sl_dist_points : close * 0.01
+risk_amount = strategy.equity * (risk_pct / 100.0)
+qty_based_on_risk = risk_amount / sl_points
+max_qty_leverage = (strategy.equity * leverage) / close
+final_qty = math.floor(math.min(qty_based_on_risk, max_qty_leverage))
+if final_qty <= 0
+    final_qty := 1
+
+// ==========================================
+// ENTRY & EXIT TRIGGERS
+// ==========================================
+vol_ok = not use_volume_filter or volume > volume_sma
+
+// Bullish triggers: Supertrend flip or EMA cross under Supertrend green state
+long_entry_signal = (ta.crossunder(st_dir, 0) or (st_dir == -1 and ta.crossover(ema_fast, ema_slow))) and close > ema200 and close > vwap_val and vol_ok
+// Bearish triggers: Supertrend flip or EMA cross under Supertrend red state
+short_entry_signal = (ta.crossover(st_dir, 0) or (st_dir == 1 and ta.crossunder(ema_fast, ema_slow))) and close < ema200 and close < vwap_val and vol_ok
+
+can_trade = in_entry_window and trades_today < max_daily_trades and not daily_loss_limit_exceeded and not drawdown_limit_exceeded
+
+// Execute Entries
+if can_trade and pos_size == 0
+    if long_entry_signal
+        strategy.entry("Long", strategy.long, qty=final_qty, comment="Long Entry")
+        alert("Buy Alert: Long Entry on " + syminfo.ticker, alert.freq_once_per_bar)
+    else if short_entry_signal
+        strategy.entry("Short", strategy.short, qty=final_qty, comment="Short Entry")
+        alert("Sell Alert: Short Entry on " + syminfo.ticker, alert.freq_once_per_bar)
+
+// Set target levels on entry
+if pos_entered
+    entry_price := close
+    sl_dist = atr_val * atr_sl_mult
+    tp_dist = sl_dist * rr_ratio
+    if pos_size > 0
+        sl_price := close - sl_dist
+        tp_price := close + tp_dist
+        trail_sl_price := sl_price
+    else
+        sl_price := close + sl_dist
+        tp_price := close - tp_dist
+        trail_sl_price := sl_price
+    break_even_triggered := false
+
+// Update target levels with actual execution price if available
+if pos_size != 0 and not na(strategy.opentrades.entry_price(0))
+    entry_price := strategy.opentrades.entry_price(0)
+    sl_dist = atr_val * atr_sl_mult
+    tp_dist = sl_dist * rr_ratio
+    if pos_size > 0
+        sl_price := entry_price - sl_dist
+        tp_price := entry_price + tp_dist
+        if na(trail_sl_price) or trail_sl_price < sl_price
+            trail_sl_price := sl_price
+    else
+        sl_price := entry_price + sl_dist
+        tp_price := entry_price - tp_dist
+        if na(trail_sl_price) or trail_sl_price > sl_price
+            trail_sl_price := sl_price
+
+// ==========================================
+// DYNAMIC TRADE MANAGEMENT
+// ==========================================
+if pos_size != 0
+    // 1. Break-even logic
+    if enable_be and not break_even_triggered
+        if pos_size > 0 and close >= entry_price + (entry_price - sl_price) * be_trigger_mult
+            trail_sl_price := entry_price
+            break_even_triggered := true
+        else if pos_size < 0 and close <= entry_price - (sl_price - entry_price) * be_trigger_mult
+            trail_sl_price := entry_price
+            break_even_triggered := true
+
+    // 2. Trailing Stop logic
+    if enable_trail
+        if pos_size > 0
+            trail_val = close - (atr_val * trail_atr_mult)
+            if trail_val > trail_sl_price
+                trail_sl_price := trail_val
+        else if pos_size < 0
+            trail_val = close + (atr_val * trail_atr_mult)
+            if trail_val < trail_sl_price
+                trail_sl_price := trail_val
+
+// Active Exit Orders
+if pos_size > 0
+    strategy.exit("Exit Long", "Long", stop=trail_sl_price, limit=tp_price, comment_loss="SL Hit", comment_profit="TP Hit")
+else if pos_size < 0
+    strategy.exit("Exit Short", "Short", stop=trail_sl_price, limit=tp_price, comment_loss="SL Hit", comment_profit="TP Hit")
+
+// EOD Force Close
+if in_exit_window
+    strategy.close_all(comment="EOD Force Exit")
+
+// Reset state tracking on exit
+if pos_size == 0
+    entry_price := na
+    sl_price := na
+    tp_price := na
+    trail_sl_price := na
+    break_even_triggered := false
+
+// Trigger Alerts on Exit
+if pos_exited
+    string exit_reason = "Exit Triggered"
+    if strategy.closedtrades > 0
+        last_trade_index = strategy.closedtrades - 1
+        profit_val = strategy.closedtrades.profit(last_trade_index)
+        if profit_val > 0
+            exit_reason := "Take Profit Hit"
+        else
+            exit_reason := "Stop Loss Hit"
+    alert("Exit Alert: " + exit_reason + " on " + syminfo.ticker, alert.freq_once_per_bar)
+
+// ==========================================
+// CHART VISUALS
+// ==========================================
+// EMA 200 Trend Line
+plot(ema200, title="EMA 200 Filter", color=color.blue, linewidth=2)
+
+// Supertrend Background Shading
+st_color = st_dir == -1 ? color.new(color.green, 95) : color.new(color.red, 95)
+bgcolor(show_bg ? st_color : na, title="Supertrend Trend Shading")
+
+// Entry and Exit Shapes
+plotshape(pos_entered and pos_size > 0, title="Long Entry Marker", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.normal)
+plotshape(pos_entered and pos_size < 0, title="Short Entry Marker", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.normal)
+plotshape(pos_exited and pos_size[1] > 0, title="Long Exit Marker", style=shape.xcross, location=location.abovebar, color=color.orange, size=size.normal)
+plotshape(pos_exited and pos_size[1] < 0, title="Short Exit Marker", style=shape.xcross, location=location.belowbar, color=color.orange, size=size.normal)
+
+// Dynamic Stop Loss and Take Profit lines
+plot(pos_size != 0 ? tp_price : na, title="Take Profit Level", color=color.green, linewidth=2, style=plot.style_linebr)
+plot(pos_size != 0 ? trail_sl_price : na, title="Active Stop Loss Level", color=color.red, linewidth=2, style=plot.style_linebr)
+
+// ==========================================
+// LIVE STATS TABLE CALCULATION
+// ==========================================
+var int total_trades_count = 0
+var int win_trades_count = 0
+var int loss_trades_count = 0
+var float gross_profit = 0.0
+var float gross_loss = 0.0
+
+if pos_exited
+    total_trades_count += 1
+    if strategy.closedtrades > 0
+        last_profit = strategy.closedtrades.profit(strategy.closedtrades - 1)
+        if last_profit > 0
+            win_trades_count += 1
+            gross_profit += last_profit
+        else
+            loss_trades_count += 1
+            gross_loss += math.abs(last_profit)
+
+win_rate = total_trades_count > 0 ? (win_trades_count / total_trades_count) * 100.0 : 0.0
+profit_factor = gross_loss > 0 ? gross_profit / gross_loss : (gross_profit > 0 ? 999.0 : 0.0)
+net_profit = strategy.netprofit
+net_profit_pct = (net_profit / strategy.initial_capital) * 100.0
+max_dd_pct = (strategy.max_drawdown / strategy.initial_capital) * 100.0
+pos_status = pos_size > 0 ? "Long" : (pos_size < 0 ? "Short" : "Flat")
+curr_risk = pos_size != 0 ? math.abs(entry_price - trail_sl_price) * math.abs(pos_size) : 0.0
+session_status = in_entry_window ? "Active" : (in_exit_window ? "Forced Exit" : "Idle")
+
+pos_val = switch table_pos
+    "top_right" => position.top_right
+    "bottom_right" => position.bottom_right
+    "top_left" => position.top_left
+    "bottom_left" => position.bottom_left
+    => position.bottom_right
+
+if barstate.islast
+    stats_table = table.new(pos_val, 2, 9, color.new(#151924, 0), border_color=color.new(#2a2e39, 0), border_width=1)
+
+    // Header
+    table.cell(stats_table, 0, 0, "NSE Intraday Strategy Stats", bgcolor=#2a2e39, text_color=color.white, text_size=size.normal, text_halign=text.align_center)
+    table.merge_cells(stats_table, 0, 0, 1, 0)
+
+    // Net Profit Row
+    table.cell(stats_table, 0, 1, "Net Profit", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    table.cell(stats_table, 1, 1, str.format("₹{0,number,#.##} ({1,number,#.##}%)", net_profit, net_profit_pct), text_color=net_profit >= 0 ? #089981 : #f23645, text_size=size.small, text_halign=text.align_right)
+
+    // Win Rate Row
+    table.cell(stats_table, 0, 2, "Win Rate", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    table.cell(stats_table, 1, 2, str.format("{0,number,#.##}% ({1}/{2})", win_rate, win_trades_count, total_trades_count), text_color=#d1d4dc, text_size=size.small, text_halign=text.align_right)
+
+    // Profit Factor Row
+    table.cell(stats_table, 0, 3, "Profit Factor", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    table.cell(stats_table, 1, 3, str.format("{0,number,#.##}", profit_factor), text_color=profit_factor >= 1.0 ? #089981 : #f23645, text_size=size.small, text_halign=text.align_right)
+
+    // Max Drawdown Row
+    table.cell(stats_table, 0, 4, "Max Drawdown", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    table.cell(stats_table, 1, 4, str.format("{0,number,#.##}%", max_dd_pct), text_color=#f23645, text_size=size.small, text_halign=text.align_right)
+
+    // Position Status Row
+    table.cell(stats_table, 0, 5, "Position Status", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    status_color = pos_size > 0 ? #089981 : (pos_size < 0 ? #f23645 : #d1d4dc)
+    table.cell(stats_table, 1, 5, pos_status, text_color=status_color, text_size=size.small, text_halign=text.align_right)
+
+    // Current Risk Row
+    table.cell(stats_table, 0, 6, "Current Risk", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    table.cell(stats_table, 1, 6, str.format("₹{0,number,#.##}", curr_risk), text_color=#d1d4dc, text_size=size.small, text_halign=text.align_right)
+
+    // Session Status Row
+    table.cell(stats_table, 0, 7, "Session Status", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    table.cell(stats_table, 1, 7, session_status, text_color=session_status == "Active" ? #089981 : (session_status == "Forced Exit" ? #f23645 : #d1d4dc), text_size=size.small, text_halign=text.align_right)
+
+    // Trades Today Row
+    table.cell(stats_table, 0, 8, "Trades Today", text_color=#d1d4dc, text_size=size.small, text_halign=text.align_left)
+    table.cell(stats_table, 1, 8, str.format("{0} / {1}", trades_today, max_daily_trades), text_color=trades_today >= max_daily_trades ? #f23645 : #d1d4dc, text_size=size.small, text_halign=text.align_right)
