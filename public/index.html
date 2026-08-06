@@ -463,7 +463,35 @@
     </div>
   </footer>
 
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-3 pointer-events-none"></div>
+
   <script>
+    // Premium Toast Notification System (Replaces intrusive alerts)
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-amber-600';
+
+      toast.className = `${bgClass} text-white text-xs font-bold px-5 py-3.5 rounded-lg shadow-xl transition duration-300 opacity-0 transform translate-y-2 pointer-events-auto flex items-center space-x-2 border border-white/10`;
+      toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} text-sm"></i> <span>${message}</span>`;
+
+      container.appendChild(toast);
+
+      // Animate in
+      setTimeout(() => {
+        toast.classList.remove('opacity-0', 'translate-y-2');
+      }, 50);
+
+      // Animate out and remove
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, 4000);
+    }
+
     let activeTab = 'backtest-tab';
     let myChart = null;
     let manualDirection = 'BUY';
@@ -642,10 +670,10 @@
           body: JSON.stringify(config)
         });
         const data = await response.json();
-        alert('Dashboard configuration saved successfully!');
+        showToast('Dashboard configuration saved successfully!');
         updateUIState(data.botState);
       } catch (err) {
-        alert('Failed to save settings: ' + err.message);
+        showToast('Failed to save settings: ' + err.message, 'error');
       }
     }
 
@@ -658,10 +686,10 @@
           body: JSON.stringify({ startingCapitalInINR: 10000 })
         });
         const data = await response.json();
-        alert('Paper trading logs and capital reset complete!');
+        showToast('Paper trading logs and capital reset complete!');
         updateUIState(data.botState);
       } catch (err) {
-        alert('Reset failed: ' + err.message);
+        showToast('Reset failed: ' + err.message, 'error');
       }
     }
 
@@ -683,10 +711,10 @@
           throw new Error(errData.error);
         }
         const data = await response.json();
-        alert('Manual paper trade executed successfully!');
+        showToast('Manual paper trade executed successfully!');
         updateUIState(data.botState);
       } catch (err) {
-        alert('Order execution rejected: ' + err.message);
+        showToast('Order execution rejected: ' + err.message, 'error');
       }
     }
 
@@ -701,7 +729,7 @@
         const data = await response.json();
         updateUIState(data.botState);
       } catch (err) {
-        alert('Position exit failed: ' + err.message);
+        showToast('Position exit failed: ' + err.message, 'error');
       }
     }
 
@@ -742,17 +770,16 @@
         if (data.success) {
           const finalResult = isOptimize ? data.bestResult.result : data.result;
           if (isOptimize) {
-            document.getElementById('backtest-strategy').value = data.bestResult.config.strategyName;
-            document.getElementById('backtest-sl').value = data.bestResult.config.riskManagement.stopLossPct;
-            document.getElementById('backtest-tp').value = data.bestResult.config.riskManagement.takeProfitPct;
-            alert(`Optimization complete! Selected Strategy: ${data.bestResult.config.strategyName}, SL: ${data.bestResult.config.riskManagement.stopLossPct}%, TP: ${data.bestResult.config.riskManagement.takeProfitPct}%. Win Rate: ${finalResult.dailyWinRate.toFixed(2)}%`);
+            showToast(`Optimization complete! Strategy: ${data.bestResult.config.strategyName}, Win Rate: ${finalResult.dailyWinRate.toFixed(2)}%`);
+          } else {
+            showToast('Backtest completed successfully!');
           }
           renderBacktestResults(finalResult);
         } else {
-          alert('Backtest Engine Error: ' + data.error);
+          showToast('Backtest Engine Error: ' + data.error, 'error');
         }
       } catch (err) {
-        alert('Backtest Execution Failed: ' + err.message);
+        showToast('Backtest Execution Failed: ' + err.message, 'error');
       } finally {
         loader.classList.add('hidden');
       }

@@ -29,7 +29,7 @@ let botState = {
     bbPeriod: 20,
     bbMultiplier: 2.0,
     stopLossPct: 1.0,
-    takeProfitPct: 2.5
+    takeProfitPct: 4.5 // Widened target to easily out-climb Indian TDS and transaction fees!
   },
   fees: {
     exchangeFeePct: 0.1,

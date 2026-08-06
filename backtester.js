@@ -277,7 +277,7 @@ async function backtestPortfolio({
   startingCapitalInINR = 10000,
   strategyName = 'EMA',
   strategyParams = {},
-  riskManagement = { stopLossPct: 1.0, takeProfitPct: 2.5 },
+  riskManagement = { stopLossPct: 1.0, takeProfitPct: 4.5 }, // Widened baseline target to ensure clear net gains over Indian TDS/fees
   fees = { exchangeFeePct: 0.1, tdsPct: 1.0, incomeTaxPct: 30.0 },
   tradingWindow = { startHour: 10, endHour: 16 },
   useRealApiData = false,
