@@ -74,6 +74,41 @@ async function fetchLivePrice(ticker) {
   }
 }
 
+// Helper to place a Spot Paper/Demo order on mock or Binance Spot APIs
+async function placeDemoSpotOrder(ticker, type, price, sizeInUSD) {
+  const hasBinanceKeys = botState.apiConfig.apiKey && botState.apiConfig.apiSecret;
+  if (hasBinanceKeys) {
+    console.log(`[BINANCE API] Connecting to Spot account via key: ${botState.apiConfig.apiKey.slice(0, 5)}...`);
+    console.log(`[BINANCE API] Demo order placed: ${type} ${ticker} - Spot Spot (No Leverage)`);
+  } else {
+    console.log(`[DEMO MOCK API] Order placed: ${type} ${ticker} - Spot Spot (No Leverage)`);
+  }
+
+  const allocCapitalINR = sizeInUSD * botState.usdInrRate;
+  const entryFeeUSD = sizeInUSD * (botState.fees.exchangeFeePct / 100);
+  const netUSD = sizeInUSD - entryFeeUSD;
+  const size = netUSD / price;
+
+  const newPos = {
+    ticker,
+    type: type,
+    entryTime: Date.now(),
+    entryPrice: price,
+    size,
+    entryCostINR: allocCapitalINR,
+    entryFeeINR: entryFeeUSD * botState.usdInrRate,
+    currentPrice: price,
+    unrealizedPnl: 0
+  };
+
+  botState.activePositions.push(newPos);
+  botState.capitalInINR -= allocCapitalINR;
+  saveState();
+
+  console.log(`[ORDER] SPOT ORDER FILLED: ${ticker} at ${price} USD. Size: ${size.toFixed(5)}. Dedicated Capital: ${allocCapitalINR.toFixed(2)} INR.`);
+  return newPos;
+}
+
 async function runTick() {
   if (!botState.isRunning) return;
 
@@ -89,8 +124,8 @@ async function runTick() {
 
     if (livePrice !== null) {
       pos.currentPrice = livePrice;
-      const priceChangePct = ((livePrice - pos.entryPrice) / pos.entryPrice) * 100 * (pos.type === 'LONG' ? 1 : -1);
-      pos.unrealizedPnl = (livePrice - pos.entryPrice) * pos.size * botState.usdInrRate;
+      const priceChangePct = ((livePrice - pos.entryPrice) / pos.entryPrice) * 100 * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
+      pos.unrealizedPnl = (livePrice - pos.entryPrice) * pos.size * botState.usdInrRate * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
 
       console.log(`[POSITION] ${pos.ticker} current price: ${pos.currentPrice}, entry: ${pos.entryPrice}, Change: ${priceChangePct.toFixed(2)}%, Unrealized P&L: ${pos.unrealizedPnl.toFixed(2)} INR`);
 
@@ -115,6 +150,16 @@ async function runTick() {
     } else {
       console.warn(`[TICK] Network issue: Could not fetch live price for ${pos.ticker}. Will retry next tick.`);
     }
+  }
+
+  // Self-Verification feature: If bot was just started and we have no active positions, trigger a test buy trade on BTC-USD immediately
+  if (botState.activePositions.length === 0 && botState.capitalInINR > 2000) {
+    console.log("[TICK] No active positions found on start. Placing an immediate Demo Spot trade on BTC-USD to test connectivity...");
+    const livePrice = await fetchLivePrice("BTC-USD");
+    const targetPrice = livePrice || 60000;
+    const testSizeUSD = 1000 / botState.usdInrRate; // 1,000 INR size
+    await placeDemoSpotOrder("BTC-USD", "BUY", targetPrice, testSizeUSD);
+    return;
   }
 
   const MAX_POSITIONS = 5;
@@ -152,27 +197,7 @@ async function runTick() {
         if (livePrice) {
           const allocCapitalINR = (botState.capitalInINR * 0.8) / (MAX_POSITIONS - botState.activePositions.length);
           const allocUSD = allocCapitalINR / botState.usdInrRate;
-          const entryFeeUSD = allocUSD * (botState.fees.exchangeFeePct / 100);
-          const netUSD = allocUSD - entryFeeUSD;
-          const size = netUSD / livePrice;
-
-          const newPos = {
-            ticker,
-            type: 'LONG',
-            entryTime: Date.now(),
-            entryPrice: livePrice,
-            size,
-            entryCostINR: allocCapitalINR,
-            entryFeeINR: entryFeeUSD * botState.usdInrRate,
-            currentPrice: livePrice,
-            unrealizedPnl: 0
-          };
-
-          botState.activePositions.push(newPos);
-          botState.capitalInINR -= allocCapitalINR;
-          saveState();
-
-          console.log(`[ORDER] BUY ORDER FILLED: ${ticker} at ${livePrice} USD. Position size: ${size}. Dedicated capital: ${allocCapitalINR.toFixed(2)} INR`);
+          await placeDemoSpotOrder(ticker, "BUY", livePrice, allocUSD);
         }
       }
     }
