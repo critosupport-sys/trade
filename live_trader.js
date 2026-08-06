@@ -24,7 +24,7 @@ let botState = {
     apiKey: '',
     apiSecret: ''
   },
-  tradingWindow: { startHour: 10, endHour: 16 },
+  tradingWindow: { startHour: 0, endHour: 24 },
   strategyConfig: {
     strategyName: 'SELECTIVE', // Default to super selective trend strategy
     shortPeriod: 9,

@@ -33,7 +33,7 @@ function backtestAsset({
   strategyParams = {},
   riskManagement = { stopLossPct: 2.0, takeProfitPct: 8.0 },
   fees = { exchangeFeePct: 0.1, tdsPct: 1.0, incomeTaxPct: 30.0 },
-  tradingWindow = { startHour: 10, endHour: 16 }
+  tradingWindow = { startHour: 0, endHour: 24 }
 }) {
   if (!candles || candles.length === 0) {
     return { trades: [], finalCapital: startingCapital, netProfit: 0 };
@@ -291,7 +291,7 @@ async function backtestPortfolio({
   strategyParams = {},
   riskManagement = { stopLossPct: 2.0, takeProfitPct: 8.0 }, // Dynamic baseline (2% stop loss, 8% take profit target)
   fees = { exchangeFeePct: 0.1, tdsPct: 1.0, incomeTaxPct: 30.0 },
-  tradingWindow = { startHour: 10, endHour: 16 },
+  tradingWindow = { startHour: 0, endHour: 24 },
   useRealApiData = true,
   granularity = 3600 // default to 1h for noise-free selective intraday
 }) {
@@ -401,7 +401,7 @@ async function optimizePortfolio({
   startDate = null,
   endDate = null,
   startingCapitalInINR = 10000,
-  tradingWindow = { startHour: 10, endHour: 16 }
+  tradingWindow = { startHour: 0, endHour: 24 }
 }) {
   const strategiesToTry = [
     { name: 'SELECTIVE', params: {}, sl: 2.0, tp: 8.0, g: 3600 },

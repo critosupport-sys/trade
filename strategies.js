@@ -282,28 +282,26 @@ function getSuperSelectiveSignals(candles) {
   const signals = Array(candles.length).fill('HOLD');
 
   for (let i = 1; i < candles.length; i++) {
-    if (ema9[i] === null || ema21[i] === null || ema50[i] === null || rsi[i] === null || avgVolume[i] === null) {
+    if (ema9[i] === null || ema21[i] === null || rsi[i] === null || avgVolume[i] === null) {
       continue;
     }
 
     // 1. SELECTIVE BUY/LONG CRITERIA:
-    // - Price is above 50 EMA (Major Bull trend)
     // - Golden Cross of 9/21 EMA (Momentum crossover)
-    // - RSI is between 45 and 65 (Healthy rising zone, not overbought)
-    // - Candle Volume is higher than rolling 10-candle average (Breakout confirmation)
-    if (closes[i] > ema50[i] && ema9[i - 1] <= ema21[i - 1] && ema9[i] > ema21[i]) {
-      if (rsi[i] > 45 && rsi[i] < 65 && volumes[i] > avgVolume[i]) {
+    // - RSI is between 35 and 75 (Healthy rising zone)
+    // - Candle Volume is higher than 70% of rolling 10-candle average
+    if (ema9[i - 1] <= ema21[i - 1] && ema9[i] > ema21[i]) {
+      if (rsi[i] > 35 && rsi[i] < 75 && volumes[i] >= avgVolume[i] * 0.7) {
         signals[i] = 'BUY';
       }
     }
 
     // 2. SELECTIVE SELL/SHORT CRITERIA:
-    // - Price is below 50 EMA (Major Bear trend)
     // - Death Cross of 9/21 EMA (Downward momentum)
-    // - RSI is between 35 and 55 (Falling trend)
-    // - Volume is higher than rolling average
-    if (closes[i] < ema50[i] && ema9[i - 1] >= ema21[i - 1] && ema9[i] < ema21[i]) {
-      if (rsi[i] > 35 && rsi[i] < 55 && volumes[i] > avgVolume[i]) {
+    // - RSI is between 25 and 65 (Falling trend)
+    // - Volume is higher than 70% of rolling 10-candle average
+    if (ema9[i - 1] >= ema21[i - 1] && ema9[i] < ema21[i]) {
+      if (rsi[i] > 25 && rsi[i] < 65 && volumes[i] >= avgVolume[i] * 0.7) {
         signals[i] = 'SELL';
       }
     }
