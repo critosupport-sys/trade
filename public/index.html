@@ -77,7 +77,7 @@
           <span class="text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-full"><i class="fa-solid fa-shield-halved mr-1"></i> No Fake Slippage</span>
         </h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Backtest Capital (INR)</label>
             <div class="relative">
@@ -95,9 +95,18 @@
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Range End</label>
             <input type="date" id="backtest-end" value="2026-08-06" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
           </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Technical Strategy</label>
+            <select id="backtest-strategy" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <option value="EMA">EMA Crossover (9 vs 21)</option>
+              <option value="RSI">RSI Mean Reversion (30-70)</option>
+              <option value="BB">Bollinger Bands Breakout</option>
+            </select>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Resolution</label>
             <select id="backtest-granularity" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
@@ -118,17 +127,22 @@
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Trading Window Duration</label>
-            <div class="flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              <i class="fa-solid fa-clock text-indigo-600"></i>
-              <span class="text-sm font-bold text-slate-800">6 Hours (360 Minutes)</span>
-            </div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Stop Loss (%)</label>
+            <input type="number" step="0.1" id="backtest-sl" value="1.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Take Profit (%)</label>
+            <input type="number" step="0.1" id="backtest-tp" value="2.5" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
           </div>
         </div>
 
         <div class="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-          <button onclick="runBacktest(true)" class="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2">
-            <i class="fa-solid fa-play-circle mr-1"></i> Start Real Autonomous Backtest
+          <button onclick="runBacktest(false)" class="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-play-circle mr-1"></i> Run Backtest (Real Data / Wave Sim)
+          </button>
+          <button onclick="runBacktest(true)" class="bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-bolt mr-1"></i> Auto-Optimize Strategy Config
           </button>
         </div>
       </div>
@@ -276,10 +290,7 @@
             </h2>
             <p class="text-xs text-slate-500 font-medium mt-1">Automatic order placement on 100+ spot markets based on settings</p>
           </div>
-          <div class="mt-4 md:mt-0 flex flex-wrap gap-3">
-            <button onclick="removeAllTrades()" class="bg-rose-50 hover:bg-rose-100 border border-rose-100 text-rose-700 font-bold text-xs px-4 py-2.5 rounded-lg transition flex items-center space-x-1 shadow-sm">
-              <i class="fa-solid fa-trash-can"></i> <span>REMOVE ALL ACTIVE TRADES</span>
-            </button>
+          <div class="mt-4 md:mt-0 flex space-x-3">
             <button onclick="resetLiveState()" class="border border-slate-200 hover:border-slate-300 text-slate-600 font-bold text-xs px-4 py-2.5 rounded-lg transition flex items-center space-x-1">
               <i class="fa-solid fa-rotate-left"></i> <span>Reset Capital & Logs</span>
             </button>
@@ -289,29 +300,23 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
             <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Capital (INR)</span>
-            <span id="live-capital" class="text-xl font-black text-indigo-600 mt-2">₹10,000.00</span>
+            <span id="live-capital" class="text-2xl font-black text-indigo-600 mt-2">₹10,000.00</span>
             <span class="text-[10px] text-slate-400 mt-1">USD-INR rate used: ₹83.50</span>
           </div>
 
           <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
             <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Open Positions</span>
-            <span id="live-active-positions" class="text-xl font-black text-slate-800 mt-2">0</span>
+            <span id="live-active-positions" class="text-2xl font-black text-slate-800 mt-2">0</span>
             <span class="text-[10px] text-slate-400 mt-1">Max 5 positions open concurrently</span>
           </div>
 
           <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
             <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Profits Realized (Today)</span>
-            <span id="live-realized" class="text-xl font-black text-emerald-600 mt-2">₹0.00</span>
+            <span id="live-realized" class="text-2xl font-black text-emerald-600 mt-2">₹0.00</span>
             <span class="text-[10px] text-slate-400 mt-1">Sum of completed trades in history</span>
-          </div>
-
-          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Session Duration</span>
-            <span id="countdown-timer" class="text-xl font-black text-indigo-600 mt-2">360 min (6 Hrs)</span>
-            <span class="text-[10px] text-slate-500 font-bold mt-1" id="timer-status">Waiting to start...</span>
           </div>
         </div>
       </div>
@@ -870,71 +875,6 @@
         }
       });
     }
-
-    // Global active countdown seconds (default 6 hours = 21600 seconds)
-    let countdownSeconds = 21600;
-    let timerInterval = null;
-
-    function startTimer() {
-      if (timerInterval) clearInterval(timerInterval);
-      document.getElementById('timer-status').innerText = "Live automated session active";
-      document.getElementById('timer-status').className = "text-[10px] text-emerald-600 font-bold mt-1";
-
-      timerInterval = setInterval(() => {
-        if (countdownSeconds > 0) {
-          countdownSeconds--;
-          const hours = Math.floor(countdownSeconds / 3600);
-          const minutes = Math.floor((countdownSeconds % 3600) / 60);
-          const seconds = countdownSeconds % 60;
-          document.getElementById('countdown-timer').innerText = `${hours}h ${minutes}m ${seconds}s`;
-        } else {
-          document.getElementById('countdown-timer').innerText = "0m (0 Hrs)";
-          document.getElementById('timer-status').innerText = "6h session limit completed.";
-          document.getElementById('timer-status').className = "text-[10px] text-rose-500 font-bold mt-1";
-          clearInterval(timerInterval);
-        }
-      }, 1000);
-    }
-
-    function stopTimer() {
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-      }
-      countdownSeconds = 21600; // Reset
-      document.getElementById('countdown-timer').innerText = "360 min (6 Hrs)";
-      document.getElementById('timer-status').innerText = "Waiting to start...";
-      document.getElementById('timer-status').className = "text-[10px] text-slate-500 font-bold mt-1";
-    }
-
-    // Remove all trades
-    async function removeAllTrades() {
-      if (!confirm("Are you sure you want to LIQUIDATE and close ALL active positions instantly?")) return;
-      try {
-        const response = await fetch('/api/manual_close_all', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const data = await response.json();
-        alert('All active positions successfully liquidated!');
-        updateUIState(data.botState);
-      } catch (err) {
-        alert('Failed to close positions: ' + err.message);
-      }
-    }
-
-    // Overwrite updateUIState timer trigger
-    const originalUpdateUIState = updateUIState;
-    updateUIState = function(state) {
-      originalUpdateUIState(state);
-      if (state && state.isRunning) {
-        if (!timerInterval) {
-          startTimer();
-        }
-      } else {
-        stopTimer();
-      }
-    };
 
     window.addEventListener('DOMContentLoaded', () => {
       fetchState();

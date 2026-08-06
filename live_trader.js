@@ -199,6 +199,13 @@ async function runTick() {
           const allocUSD = allocCapitalINR / botState.usdInrRate;
           await placeDemoSpotOrder(ticker, "BUY", livePrice, allocUSD);
         }
+      } else if (signal === 'SELL') {
+        const livePrice = await fetchLivePrice(ticker);
+        if (livePrice) {
+          const allocCapitalINR = (botState.capitalInINR * 0.8) / (MAX_POSITIONS - botState.activePositions.length);
+          const allocUSD = allocCapitalINR / botState.usdInrRate;
+          await placeDemoSpotOrder(ticker, "SELL", livePrice, allocUSD);
+        }
       }
     }
   }
@@ -216,8 +223,12 @@ async function closePosition(pos, reason) {
   const exitExchangeFeeINR = exitExchangeFeeUSD * botState.usdInrRate;
   const tdsINR = tdsUSD * botState.usdInrRate;
 
-  const netExitINR = grossINR - exitExchangeFeeINR - tdsINR;
-  const pnlBeforeTaxAndFees = (exitPrice - pos.entryPrice) * pos.size * botState.usdInrRate;
+  const directionMult = pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1;
+  const netExitINR = directionMult === 1
+    ? (grossINR - exitExchangeFeeINR - tdsINR)
+    : (pos.entryCostINR + (pos.entryCostINR - grossINR) - exitExchangeFeeINR - tdsINR);
+
+  const pnlBeforeTaxAndFees = (exitPrice - pos.entryPrice) * pos.size * botState.usdInrRate * directionMult;
   const netPnl = netExitINR - pos.entryCostINR;
 
   let incomeTax = 0;

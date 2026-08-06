@@ -88,20 +88,6 @@ app.post('/api/backtest', async (req, res) => {
   }
 });
 
-// Manual close ALL active positions
-app.post('/api/manual_close_all', async (req, res) => {
-  try {
-    console.log('[SERVER] Manual Close All override requested.');
-    while (botState.activePositions.length > 0) {
-      const pos = botState.activePositions[0];
-      await closePosition(pos, 'REMOVE_ALL_OVERRIDE');
-    }
-    res.json({ success: true, botState });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.post('/api/optimize', async (req, res) => {
   try {
     const { tickers, startDate, endDate, startingCapitalInINR, tradingWindow } = req.body;
