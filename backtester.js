@@ -176,7 +176,9 @@ function generateSimulatedCandles(ticker, days = 180, granularity = 3600) {
   const candleMs = granularity * 1000;
   const numCandles = Math.floor((days * 24 * 3600 * 1000) / candleMs);
 
-  let seed = 0;
+  // Use a fully randomized seed based on current milliseconds combined with the ticker name
+  // so that every single run generates a fresh, unique, and highly realistic market price path!
+  let seed = Date.now() % 1000000;
   for (let i = 0; i < ticker.length; i++) {
     seed += ticker.charCodeAt(i);
   }

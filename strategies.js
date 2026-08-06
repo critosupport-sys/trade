@@ -139,45 +139,80 @@ function calculateBollingerBands(data, period = 20, multiplier = 2) {
   return { middle: sma, upper, lower };
 }
 
-// Fetch historical candles from Coinbase Pro API
+// Fetch historical candles from Coinbase Pro API with intelligent chunking
+// Since Coinbase Pro only returns up to 300 candles per request, this function
+// automatically fetches in sequential chunks to cover the entire range safely
 async function fetchCandles(ticker, granularity = 3600, startTime = null, endTime = null) {
-  let url = `https://api.exchange.coinbase.com/products/${ticker}/candles?granularity=${granularity}`;
-  if (startTime) url += `&start=${new Date(startTime).toISOString()}`;
-  if (endTime) url += `&end=${new Date(endTime).toISOString()}`;
-
   const headers = { 'User-Agent': 'Mozilla/5.0' };
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const response = await fetch(url, { headers, timeout: 8000 });
-      if (response.status === 429) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        continue;
+  const startMs = startTime ? new Date(startTime).getTime() : Date.now() - 30 * 24 * 3600 * 1000;
+  const endMs = endTime ? new Date(endTime).getTime() : Date.now();
+
+  const chunkSpanMs = 300 * granularity * 1000; // Time covered by 300 candles
+  let currentStart = startMs;
+  let allCandles = [];
+
+  console.log(`[DATA FETCH] Fetching real historical data for ${ticker} from ${new Date(startMs).toLocaleDateString()} to ${new Date(endMs).toLocaleDateString()}...`);
+
+  // Max safety: limit to 25 chunks (~7500 candles) to prevent excessive loading
+  let chunksCount = 0;
+  while (currentStart < endMs && chunksCount < 25) {
+    chunksCount++;
+    const currentEnd = Math.min(currentStart + chunkSpanMs, endMs);
+    const url = `https://api.exchange.coinbase.com/products/${ticker}/candles?granularity=${granularity}&start=${new Date(currentStart).toISOString()}&end=${new Date(currentEnd).toISOString()}`;
+
+    let success = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(url, { headers, timeout: 8000 });
+        if (response.status === 429) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
+        if (!response.ok) {
+          throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+          throw new Error("Invalid response format");
+        }
+
+        const mapped = data.map(c => ({
+          time: c[0] * 1000,
+          low: parseFloat(c[1]),
+          high: parseFloat(c[2]),
+          open: parseFloat(c[3]),
+          close: parseFloat(c[4]),
+          volume: parseFloat(c[5])
+        }));
+        allCandles = allCandles.concat(mapped);
+        success = true;
+        break;
+      } catch (err) {
+        if (attempt === 3) {
+          console.warn(`[DATA FETCH] Warning: Failed chunk attempt for ${ticker}: ${err.message}`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 300 * attempt));
       }
-      if (!response.ok) {
-        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
-      }
-      const data = await response.json();
-      if (!Array.isArray(data)) {
-        throw new Error("Invalid response format");
-      }
-      return data.map(c => ({
-        time: c[0] * 1000,
-        low: parseFloat(c[1]),
-        high: parseFloat(c[2]),
-        open: parseFloat(c[3]),
-        close: parseFloat(c[4]),
-        volume: parseFloat(c[5])
-      })).sort((a, b) => a.time - b.time);
-    } catch (err) {
-      if (attempt === 3) {
-        console.error(`Error fetching candles for ${ticker}: ${err.message}`);
-        return [];
-      }
-      await new Promise(resolve => setTimeout(resolve, 500 * attempt));
     }
+
+    if (!success) break;
+    currentStart = currentEnd + 1000; // move start forward by 1s
+    await new Promise(resolve => setTimeout(resolve, 300)); // sleep to prevent rate limiting
   }
-  return [];
+
+  // Sort and remove duplicates
+  const uniqueCandles = [];
+  const seenTimes = new Set();
+  allCandles.forEach(c => {
+    if (!seenTimes.has(c.time)) {
+      seenTimes.add(c.time);
+      uniqueCandles.push(c);
+    }
+  });
+
+  console.log(`[DATA FETCH] Successfully fetched ${uniqueCandles.length} real candles for ${ticker}.`);
+  return uniqueCandles.sort((a, b) => a.time - b.time);
 }
 
 // Strategy Signal Generators
