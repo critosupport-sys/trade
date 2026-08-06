@@ -20,7 +20,7 @@ let botState = {
   },
   tradingWindow: { startHour: 10, endHour: 16 },
   strategyConfig: {
-    strategyName: 'EMA',
+    strategyName: 'SELECTIVE', // Default to super selective trend strategy
     shortPeriod: 9,
     longPeriod: 21,
     period: 14,
@@ -28,8 +28,8 @@ let botState = {
     oversold: 30,
     bbPeriod: 20,
     bbMultiplier: 2.0,
-    stopLossPct: 1.0,
-    takeProfitPct: 4.5 // Widened target to easily out-climb Indian TDS and transaction fees!
+    stopLossPct: 2.0,
+    takeProfitPct: 8.0 // High-target 8% baseline to out-climb Indian TDS/fees
   },
   fees: {
     exchangeFeePct: 0.1,
@@ -187,6 +187,10 @@ async function runTick() {
         signal = signals[signals.length - 1];
       } else if (botState.strategyConfig.strategyName === 'BB') {
         const { signals } = getBollingerBandsSignals(candles, botState.strategyConfig.bbPeriod, botState.strategyConfig.bbMultiplier);
+        signal = signals[signals.length - 1];
+      } else {
+        const { getSuperSelectiveSignals } = require('./strategies');
+        const { signals } = getSuperSelectiveSignals(candles);
         signal = signals[signals.length - 1];
       }
 

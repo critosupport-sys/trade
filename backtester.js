@@ -44,8 +44,11 @@ function backtestAsset({
     signalsResult = getEMACrossoverSignals(candles, strategyParams.shortPeriod || 9, strategyParams.longPeriod || 21);
   } else if (strategyName === 'RSI') {
     signalsResult = getRSIMeanReversionSignals(candles, strategyParams.period || 14, strategyParams.overbought || 70, strategyParams.oversold || 30);
-  } else {
+  } else if (strategyName === 'BB') {
     signalsResult = getBollingerBandsSignals(candles, strategyParams.period || 20, strategyParams.multiplier || 2);
+  } else {
+    const { getSuperSelectiveSignals } = require('./strategies');
+    signalsResult = getSuperSelectiveSignals(candles);
   }
 
   const { signals } = signalsResult;
@@ -275,13 +278,13 @@ async function backtestPortfolio({
   startDate = null,
   endDate = null,
   startingCapitalInINR = 10000,
-  strategyName = 'EMA',
+  strategyName = 'SELECTIVE', // Default to super selective high-gain macro trend strategy
   strategyParams = {},
-  riskManagement = { stopLossPct: 1.0, takeProfitPct: 4.5 }, // Widened baseline target to ensure clear net gains over Indian TDS/fees
+  riskManagement = { stopLossPct: 2.0, takeProfitPct: 8.0 }, // Dynamic baseline (2% stop loss, 8% take profit target)
   fees = { exchangeFeePct: 0.1, tdsPct: 1.0, incomeTaxPct: 30.0 },
   tradingWindow = { startHour: 10, endHour: 16 },
-  useRealApiData = false,
-  granularity = 300
+  useRealApiData = true,
+  granularity = 3600 // default to 1h for noise-free selective intraday
 }) {
   const allCandlesByTicker = {};
 
