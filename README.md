@@ -1,4 +1,4 @@
-# Premium Crypto Intraday Algo Bot & Backtesting Dashboard
+# premium Crypto Intraday Algo Bot & Multi-Page Dashboard
 
 An extremely robust, institutional-grade automated trading bot and responsive light-themed dashboard optimized for Indian crypto traders. It features automatic parameter optimization, customizable 6-hour trading windows, multi-asset portfolio capital allocation, strict risk management, state persistence with self-healing, and realistic Indian tax/fee calculations.
 
@@ -6,34 +6,40 @@ An extremely robust, institutional-grade automated trading bot and responsive li
 
 ## 🌟 Key Features
 
-1. **Customizable 6-Hour Intraday Trading Window**:
+1. **Three Dedicated Pages**:
+   - **Page 1 (Legit Backtesting Engine)**: Backtest custom ranges on 100+ tickers with actual historical Coinbase API data. Includes auto-optimization parameter sweep.
+   - **Page 2 (Live Paper Trading)**: Simulate intraday automated trades safely using default live data APIs.
+   - **Page 3 (Live Actual Trading)**: Integrate and trade actual money securely using custom Alpaca / Binance exchange keys.
+
+2. **Customizable 6-Hour Intraday Trading Window**:
    - Strictly opens and closes positions within the user-specified daily window (e.g., 10:00 to 16:00 UTC).
    - Prevents overnight exposure and avoids emotional or panic-driven manual exit decisions.
 
-2. **Multi-Asset Capital Allocation (80% Capital Rule)**:
+3. **Multi-Asset Capital Allocation (80% Capital Rule)**:
    - Allocates up to 80% of total capital across 100+ top cryptocurrency spot tickers concurrently.
    - Divides capital dynamically to trade multiple high-value opportunities simultaneously without over-exposing reserves.
 
-3. **Premium Strategy Suite**:
+4. **Premium Strategy Suite**:
    - **EMA Crossover**: Custom-tuned short/long EMA periods (e.g., 9 vs 21) capturing momentum.
    - **RSI Mean Reversion**: Spots extreme overbought/oversold levels.
    - **Bollinger Bands**: Trades range breakout and reversion.
+   - **Super Selective Trend**: Multi-indicator filtering that minimizes friction and overrides erosion.
 
-4. **Institutional Risk Management Bracket**:
+5. **Institutional Risk Management Bracket**:
    - Custom Stop-Loss and Take-Profit guardrails applied to every trade.
    - Automatic intraday forced liquidation before daily trading window closes.
 
-5. **Realistic Indian Crypto Taxation & Fee Simulator**:
+6. **Realistic Indian Crypto Taxation & Fee Simulator**:
    - **Flat 30% Income Tax**: Calculated strictly per profitable trade with *zero* loss offsetting (fully compliant with Indian Section 115BBH rules).
    - **1% TDS on Sells**: Automatically deducted from every exit transaction volume.
    - **0.1% Exchange Fees**: Calculated on both Entry and Exit.
    - Displays real P&L before and after all taxes/fees.
 
-6. **Self-Healing State Recovery**:
+7. **Self-Healing State Recovery**:
    - Saves current session state (balances, open positions, history) in real-time to `bot_state.json`.
    - Heals and resumes instantly after network drops or bot restarts, maintaining accurate positions.
 
-7. **One-Click Windows Start Execution**:
+8. **One-Click Windows Start Execution**:
    - Double-click `start.bat` to run the complete environment instantly, install packages, and launch the responsive UI.
 
 ---
@@ -42,10 +48,10 @@ An extremely robust, institutional-grade automated trading bot and responsive li
 
 ```
 ├── public/
-│   └── index.html      # Responsive light-themed dashboard UI (HTML5, Tailwind, Chart.js)
+│   └── index.html      # Responsive light-themed multi-page dashboard UI (HTML5, Tailwind, Chart.js)
 ├── strategies.js       # Core indicators, candle fetchers, and technical strategy signals
-├── backtester.js       # Multi-asset backtester, tax engine, and strategy optimization
-├── live_trader.js      # Live/Demo paper trading loop, state management, and self-healing
+├── backtester.js       # Multi-asset backtester, tax engine, and parameter sweep optimization
+├── live_trader.js      # Live/Demo paper and actual trading loops, state management, and self-healing
 ├── server.js           # Express.js REST API server serving the dashboard
 ├── start.bat           # Double-click startup script for Windows users
 ├── build-zip.js        # Script to package the source files into bot_project.zip

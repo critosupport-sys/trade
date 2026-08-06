@@ -1,5 +1,5 @@
 // Backtesting Engine Module
-const { fetchCandles, getEMACrossoverSignals, getRSIMeanReversionSignals, getBollingerBandsSignals } = require('./strategies');
+const { fetchCandles, getEMACrossoverSignals, getRSIMeanReversionSignals, getBollingerBandsSignals, getSuperSelectiveSignals } = require('./strategies');
 
 const USD_INR_RATE = 83.5;
 
@@ -31,7 +31,7 @@ function backtestAsset({
   startingCapital,
   strategyName,
   strategyParams = {},
-  riskManagement = { stopLossPct: 1.0, takeProfitPct: 2.5 },
+  riskManagement = { stopLossPct: 2.0, takeProfitPct: 8.0 },
   fees = { exchangeFeePct: 0.1, tdsPct: 1.0, incomeTaxPct: 30.0 },
   tradingWindow = { startHour: 10, endHour: 16 }
 }) {
@@ -47,7 +47,6 @@ function backtestAsset({
   } else if (strategyName === 'BB') {
     signalsResult = getBollingerBandsSignals(candles, strategyParams.period || 20, strategyParams.multiplier || 2);
   } else {
-    const { getSuperSelectiveSignals } = require('./strategies');
     signalsResult = getSuperSelectiveSignals(candles);
   }
 
@@ -67,24 +66,27 @@ function backtestAsset({
     const adaptiveSL = Math.max(0.6, Math.min(2.5, currentVol * 100 * 0.8)); // dynamic SL (0.6% to 2.5%)
     const adaptiveTP = Math.max(1.5, Math.min(6.5, adaptiveSL * 2.5));      // dynamic TP (1.5% to 6.5%)
 
+    const slLimit = riskManagement.stopLossPct !== undefined ? riskManagement.stopLossPct : adaptiveSL;
+    const tpLimit = riskManagement.takeProfitPct !== undefined ? riskManagement.takeProfitPct : adaptiveTP;
+
     if (activePosition) {
       const currentPrice = candle.close;
-      const directionMult = activePosition.type === 'LONG' ? 1 : -1;
+      const directionMult = activePosition.type === 'LONG' || activePosition.type === 'BUY' ? 1 : -1;
       const priceChangePct = ((currentPrice - activePosition.entryPrice) / activePosition.entryPrice) * 100 * directionMult;
 
       let shouldExit = false;
       let exitReason = '';
 
-      if (priceChangePct <= -adaptiveSL) {
+      if (priceChangePct <= -slLimit) {
         shouldExit = true;
         exitReason = 'STOP_LOSS';
-      } else if (priceChangePct >= adaptiveTP) {
+      } else if (priceChangePct >= tpLimit) {
         shouldExit = true;
         exitReason = 'TAKE_PROFIT';
       } else if (!isWithinTradingWindow(timestamp, tradingWindow.startHour, tradingWindow.endHour)) {
         shouldExit = true;
         exitReason = 'INTRADAY_FORCE_CLOSE';
-      } else if (activePosition.type === 'LONG' && signal === 'SELL') {
+      } else if ((activePosition.type === 'LONG' || activePosition.type === 'BUY') && signal === 'SELL') {
         shouldExit = true;
         exitReason = 'OPPOSING_SIGNAL';
       } else if (activePosition.type === 'SHORT' && signal === 'BUY') {
@@ -100,8 +102,12 @@ function backtestAsset({
         const tdsFee = grossValue * (fees.tdsPct / 100);
         const exitNetValue = grossValue - exitExchangeFee - tdsFee;
 
+        // Correct Symmetric Short P&L Calculations
         const pnlBeforeTaxAndFees = (exitPrice - activePosition.entryPrice) * activePosition.size * directionMult;
-        const netPnl = exitNetValue - activePosition.entryCost;
+
+        const netPnl = directionMult === 1
+          ? (exitNetValue - activePosition.entryCost)
+          : ((activePosition.entryPrice - exitPrice) * activePosition.size - exitExchangeFee - tdsFee - activePosition.entryExchangeFee);
 
         let incomeTax = 0;
         if (netPnl > 0) {
@@ -181,8 +187,12 @@ function backtestAsset({
     const tdsFee = grossValue * (fees.tdsPct / 100);
     const exitNetValue = grossValue - exitExchangeFee - tdsFee;
 
-    const pnlBeforeTaxAndFees = (exitPrice - activePosition.entryPrice) * activePosition.size;
-    const netPnl = exitNetValue - activePosition.entryCost;
+    const directionMult = activePosition.type === 'LONG' || activePosition.type === 'BUY' ? 1 : -1;
+    const pnlBeforeTaxAndFees = (exitPrice - activePosition.entryPrice) * activePosition.size * directionMult;
+
+    const netPnl = directionMult === 1
+      ? (exitNetValue - activePosition.entryCost)
+      : ((activePosition.entryPrice - exitPrice) * activePosition.size - exitExchangeFee - tdsFee - activePosition.entryExchangeFee);
 
     let incomeTax = 0;
     if (netPnl > 0) {
@@ -223,9 +233,8 @@ function generateSimulatedCandles(ticker, days = 180, granularity = 3600) {
   const candleMs = granularity * 1000;
   const numCandles = Math.floor((days * 24 * 3600 * 1000) / candleMs);
 
-  // Use a fully randomized seed based on current milliseconds combined with the ticker name
-  // so that every single run generates a fresh, unique, and highly realistic market price path!
-  let seed = Date.now() % 1000000;
+  // Use a fully deterministic seed base to ensure all optimized parameters are compared on the exact same price curves
+  let seed = 123456;
   for (let i = 0; i < ticker.length; i++) {
     seed += ticker.charCodeAt(i);
   }
@@ -386,6 +395,7 @@ async function backtestPortfolio({
   };
 }
 
+// Complete sweep across strategies, parameters, time resolution intervals, stop losses, and take profit targets
 async function optimizePortfolio({
   tickers = ["BTC-USD", "ETH-USD", "SOL-USD"],
   startDate = null,
@@ -394,12 +404,14 @@ async function optimizePortfolio({
   tradingWindow = { startHour: 10, endHour: 16 }
 }) {
   const strategiesToTry = [
-    { name: 'EMA', params: { shortPeriod: 9, longPeriod: 21 }, sl: 1.0, tp: 2.5 },
-    { name: 'EMA', params: { shortPeriod: 5, longPeriod: 15 }, sl: 1.2, tp: 3.0 },
-    { name: 'RSI', params: { period: 14, overbought: 70, oversold: 30 }, sl: 1.5, tp: 3.5 },
-    { name: 'RSI', params: { period: 10, overbought: 75, oversold: 25 }, sl: 1.0, tp: 4.0 },
-    { name: 'BB', params: { period: 20, multiplier: 2.0 }, sl: 1.5, tp: 3.0 },
-    { name: 'BB', params: { period: 15, multiplier: 1.8 }, sl: 1.2, tp: 2.5 }
+    { name: 'SELECTIVE', params: {}, sl: 2.0, tp: 8.0, g: 3600 },
+    { name: 'SELECTIVE', params: {}, sl: 1.5, tp: 6.0, g: 3600 },
+    { name: 'EMA', params: { shortPeriod: 9, longPeriod: 21 }, sl: 1.0, tp: 2.5, g: 900 },
+    { name: 'EMA', params: { shortPeriod: 5, longPeriod: 15 }, sl: 1.2, tp: 3.0, g: 900 },
+    { name: 'RSI', params: { period: 14, overbought: 70, oversold: 30 }, sl: 1.5, tp: 3.5, g: 900 },
+    { name: 'RSI', params: { period: 10, overbought: 75, oversold: 25 }, sl: 1.0, tp: 4.0, g: 300 },
+    { name: 'BB', params: { period: 20, multiplier: 2.0 }, sl: 1.5, tp: 3.0, g: 900 },
+    { name: 'BB', params: { period: 15, multiplier: 1.8 }, sl: 1.2, tp: 2.5, g: 300 }
   ];
 
   let bestResult = null;
@@ -415,10 +427,14 @@ async function optimizePortfolio({
       strategyParams: config.params,
       riskManagement: { stopLossPct: config.sl, takeProfitPct: config.tp },
       tradingWindow,
-      useRealApiData: false
+      useRealApiData: false, // use deterministic simulated candles for swifter sweeps
+      granularity: config.g
     });
 
-    const score = result.dailyWinRate * 10 + (result.netProfitInINR > 0 ? 5 : -10);
+    // Score based on maximizing daily profitable rate (priority target > 80%) and final net returns
+    const winRateScore = result.dailyWinRate;
+    const returnScore = result.netProfitInINR > 0 ? (result.netProfitInINR / startingCapitalInINR) * 100 : -100;
+    const score = (winRateScore * 10) + returnScore;
 
     if (score > bestScore) {
       bestScore = score;
@@ -426,7 +442,8 @@ async function optimizePortfolio({
         config: {
           strategyName: config.name,
           strategyParams: config.params,
-          riskManagement: { stopLossPct: config.sl, takeProfitPct: config.tp }
+          riskManagement: { stopLossPct: config.sl, takeProfitPct: config.tp },
+          granularity: config.g
         },
         result
       };

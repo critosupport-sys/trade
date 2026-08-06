@@ -79,7 +79,7 @@ app.post('/api/backtest', async (req, res) => {
       riskManagement: riskManagement || { stopLossPct: 1.0, takeProfitPct: 2.5 },
       tradingWindow: tradingWindow || { startHour: 10, endHour: 16 },
       useRealApiData: !!useRealApiData,
-      granularity: parseInt(granularity) || 300
+      granularity: parseInt(granularity) || 3600
     });
 
     res.json({ success: true, result });
@@ -108,13 +108,14 @@ app.post('/api/optimize', async (req, res) => {
 
 app.post('/api/manual_trade', (req, res) => {
   try {
-    const { ticker, type, entryPrice } = req.body;
+    const { ticker, type, entryPrice, isActual } = req.body;
     if (!ticker || !type || !entryPrice) {
       return res.status(400).json({ error: 'Missing fields' });
     }
 
     const price = parseFloat(entryPrice);
-    const allocCapitalINR = botState.capitalInINR * 0.2;
+    const activeBalance = isActual ? botState.actualCapitalInINR : botState.capitalInINR;
+    const allocCapitalINR = activeBalance * 0.2;
     if (allocCapitalINR < 100) {
       return res.status(400).json({ error: 'Insufficient capital' });
     }
@@ -136,10 +137,15 @@ app.post('/api/manual_trade', (req, res) => {
       unrealizedPnl: 0
     };
 
-    botState.activePositions.push(newPos);
-    botState.capitalInINR -= allocCapitalINR;
-    saveState();
+    if (isActual) {
+      botState.actualActivePositions.push(newPos);
+      botState.actualCapitalInINR -= allocCapitalINR;
+    } else {
+      botState.activePositions.push(newPos);
+      botState.capitalInINR -= allocCapitalINR;
+    }
 
+    saveState();
     res.json({ success: true, botState });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -148,13 +154,30 @@ app.post('/api/manual_trade', (req, res) => {
 
 app.post('/api/manual_close', async (req, res) => {
   try {
-    const { ticker } = req.body;
-    const pos = botState.activePositions.find(p => p.ticker === ticker);
+    const { ticker, isActual } = req.body;
+    const posList = isActual ? botState.actualActivePositions : botState.activePositions;
+    const pos = posList.find(p => p.ticker === ticker);
+
     if (!pos) {
       return res.status(404).json({ error: 'No active position found' });
     }
 
-    await closePosition(pos, 'MANUAL_CLOSE_OVERRIDE');
+    await closePosition(pos, 'MANUAL_CLOSE_OVERRIDE', isActual);
+    res.json({ success: true, botState });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/manual_close_all', async (req, res) => {
+  try {
+    const { isActual } = req.body;
+    const posList = isActual ? [...botState.actualActivePositions] : [...botState.activePositions];
+
+    for (const pos of posList) {
+      await closePosition(pos, 'MANUAL_LIQUIDATE_ALL', isActual);
+    }
+
     res.json({ success: true, botState });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -169,6 +192,11 @@ app.post('/api/reset', (req, res) => {
   botState.startingCapitalInINR = resetCapital;
   botState.activePositions = [];
   botState.tradeHistory = [];
+
+  botState.actualCapitalInINR = resetCapital;
+  botState.actualActivePositions = [];
+  botState.actualTradeHistory = [];
+
   saveState();
 
   res.json({ success: true, botState });

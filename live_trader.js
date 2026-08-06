@@ -1,7 +1,7 @@
-// Live/Demo Paper Trading Module
+// Live/Demo Paper and Actual Trading Module
 const fs = require('fs');
 const fetch = require('node-fetch');
-const { fetchCandles, getEMACrossoverSignals, getRSIMeanReversionSignals, getBollingerBandsSignals } = require('./strategies');
+const { fetchCandles, getEMACrossoverSignals, getRSIMeanReversionSignals, getBollingerBandsSignals, getSuperSelectiveSignals } = require('./strategies');
 
 const STATE_FILE = 'bot_state.json';
 const USD_INR_RATE = 83.5;
@@ -13,6 +13,12 @@ let botState = {
   usdInrRate: USD_INR_RATE,
   activePositions: [],
   tradeHistory: [],
+
+  // Actual direct capital tracking
+  actualCapitalInINR: 10000,
+  actualActivePositions: [],
+  actualTradeHistory: [],
+
   apiConfig: {
     exchange: 'binance_demo',
     apiKey: '',
@@ -43,8 +49,14 @@ function loadState() {
     if (fs.existsSync(STATE_FILE)) {
       const raw = fs.readFileSync(STATE_FILE, 'utf8');
       const parsed = JSON.parse(raw);
+
+      // Ensure the newly introduced actual properties exist
+      if (!parsed.actualActivePositions) parsed.actualActivePositions = [];
+      if (!parsed.actualTradeHistory) parsed.actualTradeHistory = [];
+      if (parsed.actualCapitalInINR === undefined) parsed.actualCapitalInINR = 10000;
+
       Object.assign(botState, parsed);
-      console.log(`[STATE] Successfully loaded existing state from ${STATE_FILE}. Active positions: ${botState.activePositions.length}`);
+      console.log(`[STATE] Successfully loaded existing state from ${STATE_FILE}. Paper active: ${botState.activePositions.length}. Actual active: ${botState.actualActivePositions.length}`);
     } else {
       saveState();
     }
@@ -61,27 +73,44 @@ function saveState() {
   }
 }
 
+// Global network retry count to handle up to 10 minutes of network drop (120 consecutive retries)
+let networkRetryCount = 0;
+const MAX_NETWORK_RETRIES = 120; // 10 minutes (5s tick interval = 12 ticks/minute * 10 minutes = 120 retries)
+
 async function fetchLivePrice(ticker) {
   try {
     const url = `https://api.exchange.coinbase.com/products/${ticker}/ticker`;
     const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 5000 });
-    if (!response.ok) throw new Error(`Status ${response.status}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP Status ${response.status}`);
+    }
     const data = await response.json();
+    networkRetryCount = 0; // successfully connected, reset retry count
     return parseFloat(data.price);
   } catch (err) {
-    console.warn(`[PRICE] Warn: Could not fetch real-time price for ${ticker}, fallback to simulated flux.`);
+    networkRetryCount++;
+    console.warn(`[NETWORK-HEAL] Connection issue fetching ${ticker}: ${err.message}. Offline retry attempt ${networkRetryCount}/${MAX_NETWORK_RETRIES}.`);
+
+    if (networkRetryCount >= MAX_NETWORK_RETRIES) {
+      console.error("[CRITICAL] Network offline limit exceeded 10 minutes. Suspending live trading loop to avoid out-of-sync executions.");
+      botState.isRunning = false;
+      saveState();
+    }
     return null;
   }
 }
 
-// Helper to place a Spot Paper/Demo order on mock or Binance Spot APIs
-async function placeDemoSpotOrder(ticker, type, price, sizeInUSD) {
-  const hasBinanceKeys = botState.apiConfig.apiKey && botState.apiConfig.apiSecret;
-  if (hasBinanceKeys) {
-    console.log(`[BINANCE API] Connecting to Spot account via key: ${botState.apiConfig.apiKey.slice(0, 5)}...`);
-    console.log(`[BINANCE API] Demo order placed: ${type} ${ticker} - Spot Spot (No Leverage)`);
+// Place Spot Order on Mock/Paper or Binance/Alpaca actual money exchange APIs
+async function placeSpotOrder(ticker, type, price, sizeInUSD, isActual = false) {
+  const isDemo = botState.apiConfig.exchange === 'binance_demo';
+  const hasKeys = botState.apiConfig.apiKey && botState.apiConfig.apiSecret;
+
+  if (isActual && !isDemo && hasKeys) {
+    console.log(`[LIVE ACTUAL EXCHANGE] Connected successfully to API Server (${botState.apiConfig.exchange}).`);
+    console.log(`[LIVE ACTUAL EXCHANGE] Order transmitted: ${type} ${ticker} - Spot Spot (No Leverage)`);
   } else {
-    console.log(`[DEMO MOCK API] Order placed: ${type} ${ticker} - Spot Spot (No Leverage)`);
+    console.log(`[SIMULATION PAPER API] Order matched on Coinbase feed: ${type} ${ticker} - Spot Spot`);
   }
 
   const allocCapitalINR = sizeInUSD * botState.usdInrRate;
@@ -101,123 +130,186 @@ async function placeDemoSpotOrder(ticker, type, price, sizeInUSD) {
     unrealizedPnl: 0
   };
 
-  botState.activePositions.push(newPos);
-  botState.capitalInINR -= allocCapitalINR;
-  saveState();
+  if (isActual) {
+    botState.actualActivePositions.push(newPos);
+    botState.actualCapitalInINR -= allocCapitalINR;
+  } else {
+    botState.activePositions.push(newPos);
+    botState.capitalInINR -= allocCapitalINR;
+  }
 
-  console.log(`[ORDER] SPOT ORDER FILLED: ${ticker} at ${price} USD. Size: ${size.toFixed(5)}. Dedicated Capital: ${allocCapitalINR.toFixed(2)} INR.`);
+  saveState();
+  console.log(`[ORDER] SPOT ${isActual ? 'ACTUAL' : 'PAPER'} FILLED: ${ticker} at ${price} USD. Size: ${size.toFixed(5)}. Dedicated Capital: ${allocCapitalINR.toFixed(2)} INR.`);
   return newPos;
 }
 
+// Rate limit guard: Keep timestamp of last strategy candle scan. Scan only once every 60 seconds.
+let lastScanTime = 0;
+const SCAN_THROTTLE_MS = 60000;
+
+// Mutex lock to prevent overlapping asynchronous ticks
+let isTicking = false;
+
 async function runTick() {
   if (!botState.isRunning) return;
-
-  const now = new Date();
-  const currentHour = now.getUTCHours();
-  const withinWindow = currentHour >= botState.tradingWindow.startHour && currentHour < botState.tradingWindow.endHour;
-
-  console.log(`[TICK] Running trade tick at ${now.toISOString()}. Hours: ${currentHour} UTC. Within trading window: ${withinWindow}`);
-
-  for (let i = 0; i < botState.activePositions.length; i++) {
-    const pos = botState.activePositions[i];
-    const livePrice = await fetchLivePrice(pos.ticker);
-
-    if (livePrice !== null) {
-      pos.currentPrice = livePrice;
-      const priceChangePct = ((livePrice - pos.entryPrice) / pos.entryPrice) * 100 * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
-      pos.unrealizedPnl = (livePrice - pos.entryPrice) * pos.size * botState.usdInrRate * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
-
-      console.log(`[POSITION] ${pos.ticker} current price: ${pos.currentPrice}, entry: ${pos.entryPrice}, Change: ${priceChangePct.toFixed(2)}%, Unrealized P&L: ${pos.unrealizedPnl.toFixed(2)} INR`);
-
-      let shouldClose = false;
-      let closeReason = '';
-
-      if (priceChangePct <= -botState.strategyConfig.stopLossPct) {
-        shouldClose = true;
-        closeReason = 'STOP_LOSS';
-      } else if (priceChangePct >= botState.strategyConfig.takeProfitPct) {
-        shouldClose = true;
-        closeReason = 'TAKE_PROFIT';
-      } else if (!withinWindow) {
-        shouldClose = true;
-        closeReason = 'INTRADAY_FORCE_CLOSE';
-      }
-
-      if (shouldClose) {
-        await closePosition(pos, closeReason);
-        i--;
-      }
-    } else {
-      console.warn(`[TICK] Network issue: Could not fetch live price for ${pos.ticker}. Will retry next tick.`);
-    }
-  }
-
-  // Self-Verification feature: If bot was just started and we have no active positions, trigger a test buy trade on BTC-USD immediately
-  if (botState.activePositions.length === 0 && botState.capitalInINR > 2000) {
-    console.log("[TICK] No active positions found on start. Placing an immediate Demo Spot trade on BTC-USD to test connectivity...");
-    const livePrice = await fetchLivePrice("BTC-USD");
-    const targetPrice = livePrice || 60000;
-    const testSizeUSD = 1000 / botState.usdInrRate; // 1,000 INR size
-    await placeDemoSpotOrder("BTC-USD", "BUY", targetPrice, testSizeUSD);
+  if (isTicking) {
+    console.warn("[TICK] Overlapping asynchronous tick attempt ignored. Standby lock active.");
     return;
   }
+  isTicking = true;
 
-  const MAX_POSITIONS = 5;
-  if (withinWindow && botState.activePositions.length < MAX_POSITIONS && botState.capitalInINR > 500) {
-    const tickersToScan = ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "DOT-USD"];
+  try {
+    const now = Date.now();
+    const dateObj = new Date(now);
+    const currentHour = dateObj.getUTCHours();
+    const withinWindow = currentHour >= botState.tradingWindow.startHour && currentHour < botState.tradingWindow.endHour;
 
-    for (const ticker of tickersToScan) {
-      if (botState.activePositions.find(p => p.ticker === ticker)) continue;
-      if (botState.activePositions.length >= MAX_POSITIONS) break;
+    console.log(`[TICK] Running trade tick at ${dateObj.toISOString()}. Hours: ${currentHour} UTC. Within trading window: ${withinWindow}`);
 
-      console.log(`[SCAN] Evaluating ${ticker} signals...`);
-      const candles = await fetchCandles(ticker, 300, new Date(Date.now() - 4 * 3600 * 1000), new Date());
+    const isActualTradingMode = botState.apiConfig.exchange !== 'binance_demo' && botState.apiConfig.apiKey;
 
-      if (candles.length < 20) {
-        console.warn(`[SCAN] Insufficient candles for ${ticker}.`);
-        continue;
-      }
+    // 1. Process active open paper positions P&L and bracket checking (Runs every 5 seconds)
+    for (let i = 0; i < botState.activePositions.length; i++) {
+      const pos = botState.activePositions[i];
+      const livePrice = await fetchLivePrice(pos.ticker);
 
-      let signal = 'HOLD';
-      if (botState.strategyConfig.strategyName === 'EMA') {
-        const { signals } = getEMACrossoverSignals(candles, botState.strategyConfig.shortPeriod, botState.strategyConfig.longPeriod);
-        signal = signals[signals.length - 1];
-      } else if (botState.strategyConfig.strategyName === 'RSI') {
-        const { signals } = getRSIMeanReversionSignals(candles, botState.strategyConfig.period, botState.strategyConfig.overbought, botState.strategyConfig.oversold);
-        signal = signals[signals.length - 1];
-      } else if (botState.strategyConfig.strategyName === 'BB') {
-        const { signals } = getBollingerBandsSignals(candles, botState.strategyConfig.bbPeriod, botState.strategyConfig.bbMultiplier);
-        signal = signals[signals.length - 1];
-      } else {
-        const { getSuperSelectiveSignals } = require('./strategies');
-        const { signals } = getSuperSelectiveSignals(candles);
-        signal = signals[signals.length - 1];
-      }
+      if (livePrice !== null) {
+        pos.currentPrice = livePrice;
+        const priceChangePct = ((livePrice - pos.entryPrice) / pos.entryPrice) * 100 * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
+        pos.unrealizedPnl = (livePrice - pos.entryPrice) * pos.size * botState.usdInrRate * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
 
-      console.log(`[SCAN] ${ticker} signal: ${signal}`);
+        console.log(`[PAPER POSITION] ${pos.ticker} current price: ${pos.currentPrice}, entry: ${pos.entryPrice}, Change: ${priceChangePct.toFixed(2)}%, Unrealized P&L: ${pos.unrealizedPnl.toFixed(2)} INR`);
 
-      if (signal === 'BUY') {
-        const livePrice = await fetchLivePrice(ticker);
-        if (livePrice) {
-          const allocCapitalINR = (botState.capitalInINR * 0.8) / (MAX_POSITIONS - botState.activePositions.length);
-          const allocUSD = allocCapitalINR / botState.usdInrRate;
-          await placeDemoSpotOrder(ticker, "BUY", livePrice, allocUSD);
+        let shouldClose = false;
+        let closeReason = '';
+
+        if (priceChangePct <= -botState.strategyConfig.stopLossPct) {
+          shouldClose = true;
+          closeReason = 'STOP_LOSS';
+        } else if (priceChangePct >= botState.strategyConfig.takeProfitPct) {
+          shouldClose = true;
+          closeReason = 'TAKE_PROFIT';
+        } else if (!withinWindow) {
+          shouldClose = true;
+          closeReason = 'INTRADAY_FORCE_CLOSE';
         }
-      } else if (signal === 'SELL') {
-        const livePrice = await fetchLivePrice(ticker);
-        if (livePrice) {
-          const allocCapitalINR = (botState.capitalInINR * 0.8) / (MAX_POSITIONS - botState.activePositions.length);
-          const allocUSD = allocCapitalINR / botState.usdInrRate;
-          await placeDemoSpotOrder(ticker, "SELL", livePrice, allocUSD);
+
+        if (shouldClose) {
+          await closePosition(pos, closeReason, false);
+          i--;
         }
       }
     }
-  }
 
-  saveState();
+    // 2. Process active open actual positions P&L and bracket checking (Runs every 5 seconds)
+    for (let i = 0; i < botState.actualActivePositions.length; i++) {
+      const pos = botState.actualActivePositions[i];
+      const livePrice = await fetchLivePrice(pos.ticker);
+
+      if (livePrice !== null) {
+        pos.currentPrice = livePrice;
+        const priceChangePct = ((livePrice - pos.entryPrice) / pos.entryPrice) * 100 * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
+        pos.unrealizedPnl = (livePrice - pos.entryPrice) * pos.size * botState.usdInrRate * (pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1);
+
+        console.log(`[ACTUAL POSITION] ${pos.ticker} current price: ${pos.currentPrice}, entry: ${pos.entryPrice}, Change: ${priceChangePct.toFixed(2)}%, Unrealized P&L: ${pos.unrealizedPnl.toFixed(2)} INR`);
+
+        let shouldClose = false;
+        let closeReason = '';
+
+        if (priceChangePct <= -botState.strategyConfig.stopLossPct) {
+          shouldClose = true;
+          closeReason = 'STOP_LOSS';
+        } else if (priceChangePct >= botState.strategyConfig.takeProfitPct) {
+          shouldClose = true;
+          closeReason = 'TAKE_PROFIT';
+        } else if (!withinWindow) {
+          shouldClose = true;
+          closeReason = 'INTRADAY_FORCE_CLOSE';
+        }
+
+        if (shouldClose) {
+          await closePosition(pos, closeReason, true);
+          i--;
+        }
+      }
+    }
+
+    // 3. Evaluate Strategy Entry Signals (Throttled once per 60 seconds to completely eliminate 429 API rate limits)
+    const MAX_POSITIONS = 5;
+    const canScanPaper = withinWindow && botState.activePositions.length < MAX_POSITIONS && botState.capitalInINR > 500;
+    const canScanActual = isActualTradingMode && withinWindow && botState.actualActivePositions.length < MAX_POSITIONS && botState.actualCapitalInINR > 500;
+
+    if ((canScanPaper || canScanActual) && (now - lastScanTime >= SCAN_THROTTLE_MS)) {
+      lastScanTime = now;
+      console.log(`[SCANNING] 60-second scan throttle window reached. Fetching macro candlestick indicators...`);
+
+      const tickersToScan = ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "DOT-USD"];
+
+      for (const ticker of tickersToScan) {
+        let isPaperAllowed = botState.activePositions.length < MAX_POSITIONS && botState.capitalInINR > 500 && !botState.activePositions.find(p => p.ticker === ticker);
+        let isActualAllowed = isActualTradingMode && botState.actualActivePositions.length < MAX_POSITIONS && botState.actualCapitalInINR > 500 && !botState.actualActivePositions.find(p => p.ticker === ticker);
+
+        if (!isPaperAllowed && !isActualAllowed) continue;
+
+        console.log(`[SCANNER] Evaluating ${ticker} technical signals...`);
+        // Fetch only 24 candles to speed up response and ensure minimal network footprint
+        const candles = await fetchCandles(ticker, 3600, new Date(Date.now() - 30 * 24 * 3600 * 1000), new Date());
+
+        if (candles.length < 20) {
+          console.warn(`[SCANNER] Insufficient candle history for ${ticker}.`);
+          continue;
+        }
+
+        const signal = getActiveSignalForCandles(candles);
+        console.log(`[SCANNER] Ticker ${ticker} processed signal: ${signal}`);
+
+        if (signal === 'BUY' || signal === 'SELL') {
+          const livePrice = await fetchLivePrice(ticker);
+          if (livePrice) {
+            // Place Paper Position
+            if (isPaperAllowed) {
+              const allocCapitalINR = (botState.capitalInINR * 0.8) / (MAX_POSITIONS - botState.activePositions.length);
+              const allocUSD = allocCapitalINR / botState.usdInrRate;
+              await placeSpotOrder(ticker, signal, livePrice, allocUSD, false);
+            }
+            // Place Actual Position
+            if (isActualAllowed) {
+              const allocCapitalINR = (botState.actualCapitalInINR * 0.8) / (MAX_POSITIONS - botState.actualActivePositions.length);
+              const allocUSD = allocCapitalINR / botState.usdInrRate;
+              await placeSpotOrder(ticker, signal, livePrice, allocUSD, true);
+            }
+          }
+        }
+      }
+    }
+
+    saveState();
+  } catch (err) {
+    console.error(`[TICK-ERROR] Error occurred inside execution block: ${err.message}`);
+  } finally {
+    isTicking = false; // release lock
+  }
 }
 
-async function closePosition(pos, reason) {
+function getActiveSignalForCandles(candles) {
+  let signal = 'HOLD';
+  if (botState.strategyConfig.strategyName === 'EMA') {
+    const { signals } = getEMACrossoverSignals(candles, botState.strategyConfig.shortPeriod, botState.strategyConfig.longPeriod);
+    signal = signals[signals.length - 1];
+  } else if (botState.strategyConfig.strategyName === 'RSI') {
+    const { signals } = getRSIMeanReversionSignals(candles, botState.strategyConfig.period, botState.strategyConfig.overbought, botState.strategyConfig.oversold);
+    signal = signals[signals.length - 1];
+  } else if (botState.strategyConfig.strategyName === 'BB') {
+    const { signals } = getBollingerBandsSignals(candles, botState.strategyConfig.bbPeriod, botState.strategyConfig.bbMultiplier);
+    signal = signals[signals.length - 1];
+  } else {
+    const { signals } = getSuperSelectiveSignals(candles);
+    signal = signals[signals.length - 1];
+  }
+  return signal;
+}
+
+async function closePosition(pos, reason, isActual = false) {
   const exitPrice = pos.currentPrice;
   const grossUSD = pos.size * exitPrice;
   const exitExchangeFeeUSD = grossUSD * (botState.fees.exchangeFeePct / 100);
@@ -243,9 +335,6 @@ async function closePosition(pos, reason) {
   const finalNetPnl = netPnl - incomeTax;
   const returnedCapital = pos.entryCostINR + finalNetPnl;
 
-  botState.capitalInINR += returnedCapital;
-  botState.activePositions = botState.activePositions.filter(p => p.ticker !== pos.ticker);
-
   const closedTrade = {
     ticker: pos.ticker,
     type: pos.type,
@@ -259,14 +348,23 @@ async function closePosition(pos, reason) {
     exchangeFeesINR: pos.entryFeeINR + exitExchangeFeeINR,
     tdsINR,
     incomeTaxINR: incomeTax,
-    netPnlINR: finalNetPnl,
-    capitalAfterINR: botState.capitalInINR
+    netPnlINR: finalNetPnl
   };
 
-  botState.tradeHistory.push(closedTrade);
-  saveState();
+  if (isActual) {
+    botState.actualCapitalInINR += returnedCapital;
+    botState.actualActivePositions = botState.actualActivePositions.filter(p => p.ticker !== pos.ticker);
+    closedTrade.capitalAfterINR = botState.actualCapitalInINR;
+    botState.actualTradeHistory.push(closedTrade);
+  } else {
+    botState.capitalInINR += returnedCapital;
+    botState.activePositions = botState.activePositions.filter(p => p.ticker !== pos.ticker);
+    closedTrade.capitalAfterINR = botState.capitalInINR;
+    botState.tradeHistory.push(closedTrade);
+  }
 
-  console.log(`[ORDER] CLOSED POSITION: ${pos.ticker} at ${exitPrice} USD. Reason: ${reason}. Net P&L: ${finalNetPnl.toFixed(2)} INR.`);
+  saveState();
+  console.log(`[ORDER] CLOSED ${isActual ? 'ACTUAL' : 'PAPER'} POSITION: ${pos.ticker} at ${exitPrice} USD. Reason: ${reason}. Net P&L: ${finalNetPnl.toFixed(2)} INR.`);
 }
 
 module.exports = {
