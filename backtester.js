@@ -170,62 +170,6 @@ function backtestAsset({
   };
 }
 
-function generateSimulatedCandles(ticker, days = 180, granularity = 3600) {
-  const candles = [];
-  const now = Date.now();
-  const candleMs = granularity * 1000;
-  const numCandles = Math.floor((days * 24 * 3600 * 1000) / candleMs);
-
-  // Use a fully randomized seed based on current milliseconds combined with the ticker name
-  // so that every single run generates a fresh, unique, and highly realistic market price path!
-  let seed = Date.now() % 1000000;
-  for (let i = 0; i < ticker.length; i++) {
-    seed += ticker.charCodeAt(i);
-  }
-  const random = () => {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-  };
-
-  let price = ticker.startsWith("BTC") ? 60000 : ticker.startsWith("ETH") ? 3000 : ticker.startsWith("SOL") ? 140 : 1.0;
-  let timestamp = now - numCandles * candleMs;
-
-  let currentTrend = 0.0001;
-  let trendDuration = 0;
-
-  for (let i = 0; i < numCandles; i++) {
-    if (trendDuration <= 0) {
-      const isBull = random() < 0.65;
-      currentTrend = (isBull ? 0.0012 : -0.001) * (0.5 + random());
-      trendDuration = 20 + Math.floor(random() * 40);
-    }
-    trendDuration--;
-
-    const volatility = ticker.startsWith("BTC") || ticker.startsWith("ETH") ? 0.001 : 0.0025;
-    const noise = volatility * (random() - 0.5);
-    const pctChange = currentTrend + noise;
-
-    const open = price;
-    const close = Math.max(0.01, price * (1 + pctChange));
-    const high = Math.max(open, close) * (1 + random() * 0.0015);
-    const low = Math.min(open, close) * (1 - random() * 0.0015);
-    const volume = 10000 + random() * 1000000;
-
-    candles.push({
-      time: timestamp,
-      open,
-      high,
-      low,
-      close,
-      volume
-    });
-
-    price = close;
-    timestamp += candleMs;
-  }
-  return candles;
-}
-
 async function backtestPortfolio({
   tickers = ["BTC-USD", "ETH-USD", "SOL-USD"],
   startDate = null,
@@ -236,22 +180,19 @@ async function backtestPortfolio({
   riskManagement = { stopLossPct: 1.0, takeProfitPct: 2.5 },
   fees = { exchangeFeePct: 0.1, tdsPct: 1.0, incomeTaxPct: 30.0 },
   tradingWindow = { startHour: 10, endHour: 16 },
-  useRealApiData = false,
+  useRealApiData = true,
   granularity = 300
 }) {
   const allCandlesByTicker = {};
 
   for (const ticker of tickers) {
-    let candles = [];
-    if (useRealApiData) {
-      const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
-      const end = endDate ? new Date(endDate) : new Date();
-      candles = await fetchCandles(ticker, granularity, start, end);
-    }
+    console.log(`[BACKTEST ENGINE] Fetching strictly real historical candles for ${ticker} from Coinbase Pro API...`);
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 3600 * 1000); // default last 7 days of real data
+    const end = endDate ? new Date(endDate) : new Date();
 
-    if (candles.length === 0) {
-      const days = startDate ? Math.ceil((new Date(endDate || Date.now()) - new Date(startDate)) / (24 * 3600 * 1000)) : 180;
-      candles = generateSimulatedCandles(ticker, days, granularity);
+    const candles = await fetchCandles(ticker, granularity, start, end);
+    if (!candles || candles.length === 0) {
+      throw new Error(`CRITICAL: Coinbase API could not fetch real data for ${ticker}. Please verify network connection or reduce custom date range.`);
     }
     allCandlesByTicker[ticker] = candles;
   }
@@ -368,7 +309,7 @@ async function optimizePortfolio({
       strategyParams: config.params,
       riskManagement: { stopLossPct: config.sl, takeProfitPct: config.tp },
       tradingWindow,
-      useRealApiData: false
+      useRealApiData: true
     });
 
     const score = result.dailyWinRate * 10 + (result.netProfitInINR > 0 ? 5 : -10);
