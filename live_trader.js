@@ -73,6 +73,23 @@ function saveState() {
   }
 }
 
+// Helper to calculate current rolling volatility over candle closes
+function calculateCurrentVolatility(candles) {
+  if (candles.length < 20) return 0.015; // default 1.5%
+  const closes = candles.map(c => c.close);
+  let sum = 0;
+  for (let i = 0; i < 20; i++) {
+    sum += closes[closes.length - 1 - i];
+  }
+  const mean = sum / 20;
+  let sumSq = 0;
+  for (let i = 0; i < 20; i++) {
+    sumSq += Math.pow(closes[closes.length - 1 - i] - mean, 2);
+  }
+  const stdDev = Math.sqrt(sumSq / 20);
+  return Math.max(0.005, stdDev / mean);
+}
+
 // Global network retry count to handle up to 10 minutes of network drop (120 consecutive retries)
 let networkRetryCount = 0;
 const MAX_NETWORK_RETRIES = 120; // 10 minutes (5s tick interval = 12 ticks/minute * 10 minutes = 120 retries)
@@ -264,6 +281,15 @@ async function runTick() {
         console.log(`[SCANNER] Ticker ${ticker} processed signal: ${signal}`);
 
         if (signal === 'BUY' || signal === 'SELL') {
+          const currentVol = calculateCurrentVolatility(candles);
+          const expectedSwingPct = currentVol * 100 * 2.0;
+          const isFrictionTrap = expectedSwingPct < 1.5;
+
+          if (isFrictionTrap) {
+            console.log(`[SCANNER] Ticker ${ticker} signal skipped: Expected volatility swing (${expectedSwingPct.toFixed(2)}%) is too low to beat Indian tax/fee friction.`);
+            continue;
+          }
+
           const livePrice = await fetchLivePrice(ticker);
           if (livePrice) {
             // Place Paper Position

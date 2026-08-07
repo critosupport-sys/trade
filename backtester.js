@@ -139,41 +139,47 @@ function backtestAsset({
     }
 
     if (!activePosition && isWithinTradingWindow(timestamp, tradingWindow.startHour, tradingWindow.endHour)) {
-      if (signal === 'BUY') {
-        const entryPrice = candle.close;
-        const entryExchangeFee = capital * (fees.exchangeFeePct / 100);
-        const netAllocated = capital - entryExchangeFee;
-        const size = netAllocated / entryPrice;
+      // Friction-Aware Adaptive Filter: Reject signals if the expected volatility swing cannot comfortably beat the 1.2% hurdle rate
+      const expectedSwingPct = currentVol * 100 * 2.0;
+      const isFrictionTrap = expectedSwingPct < 1.5; // reject if expected daily swing is too narrow
 
-        activePosition = {
-          ticker,
-          type: 'LONG',
-          entryTime: timestamp,
-          entryPrice,
-          size,
-          entryCost: capital,
-          entryExchangeFee
-        };
+      if (!isFrictionTrap) {
+        if (signal === 'BUY') {
+          const entryPrice = candle.close;
+          const entryExchangeFee = capital * (fees.exchangeFeePct / 100);
+          const netAllocated = capital - entryExchangeFee;
+          const size = netAllocated / entryPrice;
 
-        capital = 0;
-      } else if (signal === 'SELL') {
-        // Profitable Short Selling (Symmetric Short Trades)
-        const entryPrice = candle.close;
-        const entryExchangeFee = capital * (fees.exchangeFeePct / 100);
-        const netAllocated = capital - entryExchangeFee;
-        const size = netAllocated / entryPrice;
+          activePosition = {
+            ticker,
+            type: 'LONG',
+            entryTime: timestamp,
+            entryPrice,
+            size,
+            entryCost: capital,
+            entryExchangeFee
+          };
 
-        activePosition = {
-          ticker,
-          type: 'SHORT',
-          entryTime: timestamp,
-          entryPrice,
-          size,
-          entryCost: capital,
-          entryExchangeFee
-        };
+          capital = 0;
+        } else if (signal === 'SELL') {
+          // Profitable Short Selling (Symmetric Short Trades)
+          const entryPrice = candle.close;
+          const entryExchangeFee = capital * (fees.exchangeFeePct / 100);
+          const netAllocated = capital - entryExchangeFee;
+          const size = netAllocated / entryPrice;
 
-        capital = 0;
+          activePosition = {
+            ticker,
+            type: 'SHORT',
+            entryTime: timestamp,
+            entryPrice,
+            size,
+            entryCost: capital,
+            entryExchangeFee
+          };
+
+          capital = 0;
+        }
       }
     }
   }
@@ -406,12 +412,24 @@ async function optimizePortfolio({
   const strategiesToTry = [
     { name: 'SELECTIVE', params: {}, sl: 2.0, tp: 8.0, g: 3600 },
     { name: 'SELECTIVE', params: {}, sl: 1.5, tp: 6.0, g: 3600 },
-    { name: 'EMA', params: { shortPeriod: 9, longPeriod: 21 }, sl: 1.0, tp: 2.5, g: 900 },
-    { name: 'EMA', params: { shortPeriod: 5, longPeriod: 15 }, sl: 1.2, tp: 3.0, g: 900 },
-    { name: 'RSI', params: { period: 14, overbought: 70, oversold: 30 }, sl: 1.5, tp: 3.5, g: 900 },
-    { name: 'RSI', params: { period: 10, overbought: 75, oversold: 25 }, sl: 1.0, tp: 4.0, g: 300 },
-    { name: 'BB', params: { period: 20, multiplier: 2.0 }, sl: 1.5, tp: 3.0, g: 900 },
-    { name: 'BB', params: { period: 15, multiplier: 1.8 }, sl: 1.2, tp: 2.5, g: 300 }
+
+    // Sweep Short & Long EMAs (from 5 to 35 and 12 to 50)
+    { name: 'EMA', params: { shortPeriod: 5, longPeriod: 12 }, sl: 1.5, tp: 4.5, g: 900 },
+    { name: 'EMA', params: { shortPeriod: 9, longPeriod: 21 }, sl: 1.5, tp: 5.0, g: 3600 },
+    { name: 'EMA', params: { shortPeriod: 12, longPeriod: 26 }, sl: 2.0, tp: 6.0, g: 3600 },
+    { name: 'EMA', params: { shortPeriod: 20, longPeriod: 50 }, sl: 2.0, tp: 8.0, g: 3600 },
+
+    // Sweep RSI Boundaries (Oversold 25-30, Overbought 70-75)
+    { name: 'RSI', params: { period: 14, overbought: 70, oversold: 30 }, sl: 1.5, tp: 4.5, g: 900 },
+    { name: 'RSI', params: { period: 10, overbought: 75, oversold: 25 }, sl: 2.0, tp: 6.0, g: 900 },
+    { name: 'RSI', params: { period: 20, overbought: 70, oversold: 30 }, sl: 1.5, tp: 5.0, g: 3600 },
+
+    // Sweep Bollinger Band Multipliers (1.5 to 2.5)
+    { name: 'BB', params: { period: 20, multiplier: 1.5 }, sl: 1.5, tp: 4.5, g: 900 },
+    { name: 'BB', params: { period: 20, multiplier: 1.8 }, sl: 1.5, tp: 5.0, g: 900 },
+    { name: 'BB', params: { period: 20, multiplier: 2.0 }, sl: 2.0, tp: 6.0, g: 3600 },
+    { name: 'BB', params: { period: 15, multiplier: 2.2 }, sl: 2.0, tp: 7.0, g: 3600 },
+    { name: 'BB', params: { period: 15, multiplier: 2.5 }, sl: 2.5, tp: 8.0, g: 3600 }
   ];
 
   let bestResult = null;
