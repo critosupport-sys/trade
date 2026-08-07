@@ -1,0 +1,6 @@
+node_modules/
+bot_state.json
+bot_project.zip
+.DS_Store
+*.log
+npm-debug.log*

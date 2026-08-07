@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Premium Multi-Page Crypto Intraday Algo Trading Bot</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome for professional icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js for professional charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background-color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- Main Header / Navigation -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="bg-indigo-600 text-white p-2.5 rounded-lg flex items-center justify-center shadow-md shadow-indigo-100">
+          <i class="fa-solid fa-robot text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-extrabold tracking-tight text-slate-950">INTRADAY BOT<span class="text-indigo-600 font-medium font-mono text-xs ml-1.5 px-2 py-0.5 bg-indigo-50 rounded-full">v2.0</span></h1>
+          <p class="text-xs text-slate-500 font-medium">Auto-Optimizer, Paper Trading & Live Actual Trading</p>
+        </div>
+      </div>
+
+      <!-- Top Actions & Live Status Indicator -->
+      <div class="flex items-center space-x-6">
+        <div class="flex items-center space-x-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-full shadow-inner">
+          <span class="relative flex h-3 w-3">
+            <span id="status-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"></span>
+            <span id="status-dot" class="relative inline-flex rounded-full h-3 w-3"></span>
+          </span>
+          <span id="bot-status-text" class="text-xs font-bold uppercase tracking-wider text-slate-600">Inactive</span>
+        </div>
+
+        <button id="toggle-bot-btn" onclick="toggleBot()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-5 py-2 rounded-lg shadow-md hover:shadow-lg transition flex items-center space-x-2">
+          <i class="fa-solid fa-play"></i> <span>START ALGO BOT</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page Navigation Bar -->
+  <div class="bg-white border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-8 overflow-x-auto">
+      <button onclick="switchTab('backtest-tab')" id="nav-backtest-tab" class="border-b-2 border-indigo-600 py-4 px-1 text-sm font-semibold text-indigo-600 transition flex items-center space-x-2 whitespace-nowrap">
+        <i class="fa-solid fa-chart-line"></i> <span>1. Legit Backtesting Engine</span>
+      </button>
+      <button onclick="switchTab('live-tab')" id="nav-live-tab" class="border-b-2 border-transparent py-4 px-1 text-sm font-medium text-slate-500 hover:text-indigo-600 hover:border-indigo-600 transition flex items-center space-x-2 whitespace-nowrap">
+        <i class="fa-solid fa-tower-broadcast"></i> <span>2. Live Paper Trading</span>
+      </button>
+      <button onclick="switchTab('actual-tab')" id="nav-actual-tab" class="border-b-2 border-transparent py-4 px-1 text-sm font-medium text-slate-500 hover:text-indigo-600 hover:border-indigo-600 transition flex items-center space-x-2 whitespace-nowrap">
+        <i class="fa-solid fa-wallet"></i> <span>3. Live Actual Trading</span>
+      </button>
+      <button onclick="switchTab('settings-tab')" id="nav-settings-tab" class="border-b-2 border-transparent py-4 px-1 text-sm font-medium text-slate-500 hover:text-indigo-600 hover:border-indigo-600 transition flex items-center space-x-2 whitespace-nowrap">
+        <i class="fa-solid fa-sliders"></i> <span>Control Settings & APIs</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content Body -->
+  <main class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- 1. BACKTESTING DASHBOARD TAB -->
+    <div id="backtest-tab" class="space-y-8">
+
+      <!-- Backtest Configuration Panel & Controller -->
+      <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <h2 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-5 flex items-center justify-between">
+          <span class="flex items-center space-x-2"><i class="fa-solid fa-gears text-indigo-600"></i> <span>Configure Backtest Settings</span></span>
+          <span class="text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-full"><i class="fa-solid fa-shield-halved mr-1"></i> 100% Real API Data</span>
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Backtest Capital (INR)</label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold">₹</span>
+              <input type="number" id="backtest-capital" value="10000" class="pl-7 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Range Start</label>
+            <input type="date" id="backtest-start" value="2026-02-06" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Range End</label>
+            <input type="date" id="backtest-end" value="2026-08-06" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Technical Strategy</label>
+            <select id="backtest-strategy" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <option value="SELECTIVE">Super Selective Trend (Best Return)</option>
+              <option value="EMA">EMA Crossover (9 vs 21)</option>
+              <option value="RSI">RSI Mean Reversion (30-70)</option>
+              <option value="BB">Bollinger Bands Breakout</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Resolution</label>
+            <select id="backtest-granularity" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <option value="3600">1 Hour (Recommended/Trend)</option>
+              <option value="900">15 Minutes (Precise Entries)</option>
+              <option value="300">5 Minutes (Ultra High-Precision)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Daily Trading Window</label>
+            <div class="flex items-center space-x-2">
+              <input type="number" id="backtest-window-start" value="0" min="0" max="24" class="text-center block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <span class="text-slate-400 font-bold">to</span>
+              <input type="number" id="backtest-window-end" value="24" min="0" max="24" class="text-center block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <span class="text-xs font-bold text-slate-400">HRS UTC (24H Format)</span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Stop Loss (%)</label>
+            <input type="number" step="0.1" id="backtest-sl" value="2.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Take Profit (%)</label>
+            <input type="number" step="0.1" id="backtest-tp" value="8.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+          </div>
+        </div>
+
+        <div class="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+          <button onclick="runBacktest(false)" class="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-play-circle mr-1"></i> Run Backtest (Real Data / Wave Sim)
+          </button>
+          <button onclick="runBacktest(true)" class="bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-bolt mr-1"></i> Auto-Optimize Strategy Config
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Loading Indicator -->
+      <div id="loading-overlay" class="hidden bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg p-4 flex items-center space-x-3 shadow-inner">
+        <i class="fa-solid fa-circle-notch animate-spin text-lg"></i>
+        <span class="font-bold text-sm" id="loading-msg">Fetching historical pricing and executing trades...</span>
+      </div>
+
+      <!-- Metrics Stats Banner -->
+      <div id="metrics-panel" class="hidden grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Profit (Post-Tax)</span>
+          <div class="mt-2 flex items-baseline">
+            <span id="metric-pnl" class="text-2xl font-black">₹0</span>
+            <span id="metric-pnl-pct" class="ml-2 text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">+0%</span>
+          </div>
+          <span class="text-[10px] text-slate-400 mt-1">Net capital growth</span>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Profitable Days Rate</span>
+          <div class="mt-2 flex items-baseline">
+            <span id="metric-daily-win" class="text-2xl font-black">0%</span>
+            <span id="metric-days-ratio" class="ml-2 text-xs font-bold text-slate-500">0/0 Days</span>
+          </div>
+          <span class="text-[10px] text-slate-400 mt-1">Target: >80% profitable days</span>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">TDS Retained (1%)</span>
+          <div class="mt-2 flex items-baseline">
+            <span id="metric-tds" class="text-2xl font-black text-amber-600">₹0</span>
+          </div>
+          <span class="text-[10px] text-slate-400 mt-1">Indian TDS on sell value</span>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Indian Flat Tax (30%)</span>
+          <div class="mt-2 flex items-baseline">
+            <span id="metric-tax" class="text-2xl font-black text-rose-600">₹0</span>
+          </div>
+          <span class="text-[10px] text-slate-400 mt-1">30% per profit trade (no offset)</span>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Trades Done</span>
+          <div class="mt-2 flex items-baseline">
+            <span id="metric-trades-total" class="text-2xl font-black">0</span>
+            <span id="metric-trades-ratio" class="ml-2 text-xs font-bold text-slate-500">0 Win / 0 Loss</span>
+          </div>
+          <span class="text-[10px] text-slate-400 mt-1">Includes long & short loops</span>
+        </div>
+      </div>
+
+      <!-- Chart and Analytics Summary -->
+      <div id="analytics-panel" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Capital Equity Curve Chart -->
+        <div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col">
+          <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
+            <i class="fa-solid fa-chart-area text-indigo-600"></i> <span>Daily Capital Equity Growth Curve (INR)</span>
+          </h3>
+          <div class="flex-grow min-h-[320px] relative">
+            <canvas id="equityChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Strategy Optimization / Details Cards -->
+        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
+              <i class="fa-solid fa-list-check text-indigo-600"></i> <span>Taxation & Fee Impact Summary</span>
+            </h3>
+            <div class="space-y-4">
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-500 font-medium">Gross Profit (Before Tax/Fees)</span>
+                <span id="sum-gross-pnl" class="font-bold text-slate-900">₹0.00</span>
+              </div>
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-500 font-medium">Exchange Fees Deducted</span>
+                <span id="sum-fees" class="font-bold text-rose-500">-₹0.00</span>
+              </div>
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-500 font-medium">1% TDS Deducted (Sells)</span>
+                <span id="sum-tds" class="font-bold text-amber-500">-₹0.00</span>
+              </div>
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-500 font-medium">30% Flat Income Tax (Wins)</span>
+                <span id="sum-tax" class="font-bold text-rose-500">-₹0.00</span>
+              </div>
+              <div class="border-t border-slate-100 pt-3 flex justify-between items-center text-sm font-black">
+                <span class="text-slate-900">Final Net Profit (After-Tax)</span>
+                <span id="sum-net-pnl" class="text-indigo-600 text-base">₹0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 bg-slate-50 rounded-lg p-4 border border-slate-100">
+            <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Intraday Risk Rule</h4>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Bot allocates up to <span class="font-bold text-indigo-600">80%</span> of active capital across assets. Open positions are guarded by Stop-Loss and Take-Profit brackets, and automatically forced closed before 6-hour window exit.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paginated Executed Trades Table -->
+      <div id="trades-panel" class="hidden bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center justify-between">
+          <span class="flex items-center space-x-2"><i class="fa-solid fa-table-list text-indigo-600"></i> <span>Real Simulated Executed Trades Ledger</span></span>
+          <span class="text-xs text-slate-400 font-semibold" id="trades-count-text">Showing 0 trades</span>
+        </h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                <th class="px-6 py-3">Asset</th>
+                <th class="px-6 py-3">Type</th>
+                <th class="px-6 py-3">Entry Price / Time</th>
+                <th class="px-6 py-3">Exit Price / Time</th>
+                <th class="px-6 py-3">Exit Reason</th>
+                <th class="px-6 py-3 text-right">Taxes & Fees Paid</th>
+                <th class="px-6 py-3 text-right">Net P&L (Post-Tax)</th>
+              </tr>
+            </thead>
+            <tbody id="trades-table-body" class="divide-y divide-slate-100 font-medium">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- 2. LIVE PAPER TRADING TAB -->
+    <div id="live-tab" class="hidden space-y-8">
+
+      <!-- Top Overview Panel -->
+      <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-5 mb-6">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 flex items-center space-x-2">
+              <i class="fa-solid fa-circle-dot text-emerald-500 animate-pulse"></i> <span>Live Simulated Paper Trading Terminal</span>
+            </h2>
+            <p class="text-xs text-slate-500 font-medium mt-1">Automatic demo order placement on 100+ spot markets using free public API feed</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button onclick="resetLiveState()" class="border border-slate-200 hover:border-slate-300 text-slate-600 font-bold text-xs px-4 py-2.5 rounded-lg transition flex items-center space-x-1">
+              <i class="fa-solid fa-rotate-left"></i> <span>Reset Capital & Logs</span>
+            </button>
+            <button id="live-toggle-btn" onclick="toggleBot()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition flex items-center space-x-2 shadow-md">
+              <i class="fa-solid fa-play"></i> <span>START ALGO BOT</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Demo Balance (INR)</span>
+            <span id="live-capital" class="text-2xl font-black text-indigo-600 mt-2">₹10,000.00</span>
+            <span class="text-[10px] text-slate-400 mt-1">Safe simulated paper funds</span>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Open Positions</span>
+            <span id="live-active-positions" class="text-2xl font-black text-slate-800 mt-2">0</span>
+            <span class="text-[10px] text-slate-400 mt-1">Max 5 positions open concurrently</span>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Gross Unrealized P&L</span>
+            <span id="live-gross-unrealized" class="text-2xl font-black text-slate-700 mt-2">₹0.00</span>
+            <span class="text-[10px] text-slate-400 mt-1">Current floating profit/loss</span>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Realized (Post-Tax)</span>
+            <span id="live-realized" class="text-2xl font-black text-emerald-600 mt-2">₹0.00</span>
+            <span class="text-[10px] text-slate-400 mt-1">After exchange fee, TDS, & 30% Tax</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Positions and Order Tickets -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Order execution ticket -->
+        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
+            <i class="fa-solid fa-ticket text-indigo-600"></i> <span>Execute Manual Paper Trade</span>
+          </h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Cryptocurrency Asset</label>
+              <select id="manual-ticker" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+                <option value="BTC-USD">Bitcoin (BTC-USD)</option>
+                <option value="ETH-USD">Ethereum (ETH-USD)</option>
+                <option value="SOL-USD">Solana (SOL-USD)</option>
+                <option value="ADA-USD">Cardano (ADA-USD)</option>
+                <option value="DOGE-USD">Dogecoin (DOGE-USD)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Order Direction</label>
+              <div class="grid grid-cols-2 gap-3">
+                <button id="dir-buy" onclick="setDirection('BUY')" class="bg-indigo-600 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-sm">BUY (Long)</button>
+                <button id="dir-sell" onclick="setDirection('SELL')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg">SELL (Short)</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Simulated Entry Price (USD)</label>
+              <input type="number" id="manual-price" value="65000" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+            </div>
+
+            <button onclick="submitManualTrade()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-3 px-6 rounded-lg shadow transition flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-paper-plane mr-1"></i> Submit Paper Order
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Open Positions Card -->
+        <div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <h3 class="text-sm font-bold text-slate-800 flex items-center space-x-2">
+              <i class="fa-solid fa-circle-chevron-right text-indigo-600"></i> <span>Active Open Paper Positions</span>
+            </h3>
+            <button onclick="manualCloseAll(false)" class="text-xs bg-rose-50 text-rose-700 font-bold px-2.5 py-1 rounded-lg border border-rose-100 hover:bg-rose-100 transition">
+              REMOVE ALL ACTIVE TRADES
+            </button>
+          </div>
+          <div class="space-y-4" id="live-positions-container">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Live Trading Execution Logs -->
+      <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
+          <i class="fa-solid fa-terminal text-indigo-600"></i> <span>Live Paper Algo Execution Logs</span>
+        </h3>
+        <div id="live-logs-container" class="bg-slate-900 text-slate-100 font-mono text-xs rounded-lg p-5 h-64 overflow-y-auto space-y-2">
+          <p class="text-slate-400">[SYSTEM] Live paper trading console initialized.</p>
+          <p class="text-slate-400">[SYSTEM] Ready to execute automated orders within 6-hour daily window.</p>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- 3. LIVE ACTUAL TRADING TAB -->
+    <div id="actual-tab" class="hidden space-y-8">
+
+      <!-- Top Actual Overview Panel -->
+      <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-5 mb-6">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 flex items-center space-x-2">
+              <i class="fa-solid fa-wallet text-indigo-600"></i> <span>Live ACTUAL Money Trading Terminal</span>
+            </h2>
+            <p class="text-xs text-rose-600 font-bold mt-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Warning: This executes real capital trades directly on your configured Alpaca / Binance exchange!</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button id="actual-toggle-btn" onclick="toggleBot()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition flex items-center space-x-2 shadow-md">
+              <i class="fa-solid fa-play"></i> <span>START LIVE ACTUAL ALGO</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Real Cash Balance (INR)</span>
+            <span id="actual-capital" class="text-2xl font-black text-rose-600 mt-2">₹0.00</span>
+            <span class="text-[10px] text-slate-400 mt-1">Fetched live from exchange API</span>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Real Positions</span>
+            <span id="actual-active-positions" class="text-2xl font-black text-slate-800 mt-2">0</span>
+            <span class="text-[10px] text-slate-400 mt-1">Live exchange open trades</span>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Unrealized profit & loss</span>
+            <span id="actual-gross-unrealized" class="text-2xl font-black text-slate-700 mt-2">₹0.00</span>
+            <span class="text-[10px] text-slate-400 mt-1">Floating exchange balance delta</span>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col justify-between shadow-inner">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Actual Net Realized (After-Tax)</span>
+            <span id="actual-realized" class="text-2xl font-black text-emerald-600 mt-2">₹0.00</span>
+            <span class="text-[10px] text-slate-400 mt-1">Fully taxed actual net gains</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Actual Positions and Real-Order Ticket -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Live actual order execution ticket -->
+        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
+            <i class="fa-solid fa-bolt text-rose-600"></i> <span>Execute Direct Exchange Order</span>
+          </h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Crypto Asset Pair</label>
+              <select id="actual-ticker-select" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+                <option value="BTC-USD">BTC-USD</option>
+                <option value="ETH-USD">ETH-USD</option>
+                <option value="SOL-USD">SOL-USD</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Trade Direction</label>
+              <div class="grid grid-cols-2 gap-3">
+                <button id="act-dir-buy" onclick="setActualDirection('BUY')" class="bg-rose-600 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-sm">BUY (Long)</button>
+                <button id="act-dir-sell" onclick="setActualDirection('SELL')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg">SELL (Short)</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Real Price Trigger (USD)</label>
+              <input type="number" id="actual-price-input" value="65000" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+            </div>
+
+            <button onclick="submitActualTrade()" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md transition flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-triangle-exclamation mr-1"></i> TRANSMIT REAL ORDER
+            </button>
+          </div>
+        </div>
+
+        <!-- Real Open Positions Card -->
+        <div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <h3 class="text-sm font-bold text-slate-800 flex items-center space-x-2">
+              <i class="fa-solid fa-wallet text-rose-600"></i> <span>Live Exchange Positions (Alpaca/Binance)</span>
+            </h3>
+            <button onclick="manualCloseAll(true)" class="text-xs bg-rose-600 text-white font-bold px-2.5 py-1 rounded-lg shadow-sm hover:bg-rose-700 transition">
+              LIQUIDATE ALL LIVE TRADES
+            </button>
+          </div>
+          <div class="space-y-4" id="actual-positions-container">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Actual Execution Console -->
+      <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
+          <i class="fa-solid fa-terminal text-rose-600"></i> <span>Live Exchange Execution Console</span>
+        </h3>
+        <div id="actual-logs-container" class="bg-slate-900 text-slate-100 font-mono text-xs rounded-lg p-5 h-64 overflow-y-auto space-y-2">
+          <p class="text-rose-400">[EXCHANGE] Live connection pool standby. Enter Alpaca / Binance API keys to authenticate transmission.</p>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- 4. CONTROL SETTINGS TAB -->
+    <div id="settings-tab" class="hidden space-y-8">
+
+      <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <h2 class="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-6 flex items-center space-x-2">
+          <i class="fa-solid fa-sliders text-indigo-600"></i> <span>Dashboard Settings and API Key Configuration</span>
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Exchange keys -->
+          <div class="space-y-4">
+            <h3 class="text-sm font-bold text-slate-800 border-b border-slate-50 pb-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-key text-indigo-500"></i> <span>Brokerage / Exchange API Connection</span>
+            </h3>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Exchange / Broker Connection</label>
+              <select id="settings-exchange" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+                <option value="binance_demo">Binance Demo / Paper account (No credentials required)</option>
+                <option value="alpaca">Alpaca Paper / Live API</option>
+                <option value="binance_live">Binance Live API Account</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">API Key (or Client ID)</label>
+              <input type="text" id="settings-api-key" placeholder="Enter exchange API Key" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Secret Key</label>
+              <input type="password" id="settings-api-secret" placeholder="••••••••••••••••" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Strategy details -->
+          <div class="space-y-4">
+            <h3 class="text-sm font-bold text-slate-800 border-b border-slate-50 pb-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-chart-bar text-indigo-500"></i> <span>Customizable Taxes & Fee Matrix (Indian Crypto Rules)</span>
+            </h3>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Flat Capital Gains Tax (%)</label>
+              <input type="number" step="1" id="settings-tax-pct" value="30" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+              <span class="text-[10px] text-slate-400">Flat 30% tax on gains per trade with absolutely NO loss offsetting in India</span>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">TDS on Sale/Exit transactions (%)</label>
+              <input type="number" step="0.1" id="settings-tds-pct" value="1.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+              <span class="text-[10px] text-slate-400">1% Tax Deducted at Source (TDS) on exit total gross transaction volume</span>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Exchange Trading Fee (%)</label>
+              <input type="number" step="0.01" id="settings-fee-pct" value="0.1" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-8 pt-5 border-t border-slate-100 flex justify-end">
+          <button onclick="saveDashboardSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition flex items-center space-x-1">
+            <i class="fa-solid fa-floppy-disk mr-1"></i> <span>Save Configuration</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400 font-medium">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <p>© 2026 Intraday Trading Bot. 100% Real Backtesting, Live Paper, & Live Actual Trading Dashboard. Made for Indian Traders.</p>
+    </div>
+  </footer>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-3 pointer-events-none"></div>
+
+  <script>
+    // Premium Toast Notification System (Replaces intrusive alerts)
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-amber-600';
+
+      toast.className = `${bgClass} text-white text-xs font-bold px-5 py-3.5 rounded-lg shadow-xl transition duration-300 opacity-0 transform translate-y-2 pointer-events-auto flex items-center space-x-2 border border-white/10`;
+      toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} text-sm"></i> <span>${message}</span>`;
+
+      container.appendChild(toast);
+
+      // Animate in
+      setTimeout(() => {
+        toast.classList.remove('opacity-0', 'translate-y-2');
+      }, 50);
+
+      // Animate out and remove
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, 4000);
+    }
+
+    let activeTab = 'backtest-tab';
+    let myChart = null;
+    let manualDirection = 'BUY';
+    let actualManualDirection = 'BUY';
+
+    function setDirection(dir) {
+      manualDirection = dir;
+      if (dir === 'BUY') {
+        document.getElementById('dir-buy').className = "bg-indigo-600 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-sm";
+        document.getElementById('dir-sell').className = "bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg";
+      } else {
+        document.getElementById('dir-sell').className = "bg-rose-600 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-sm";
+        document.getElementById('dir-buy').className = "bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg";
+      }
+    }
+
+    function setActualDirection(dir) {
+      actualManualDirection = dir;
+      if (dir === 'BUY') {
+        document.getElementById('act-dir-buy').className = "bg-rose-600 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-sm";
+        document.getElementById('act-dir-sell').className = "bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg";
+      } else {
+        document.getElementById('act-dir-sell').className = "bg-rose-600 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-sm";
+        document.getElementById('act-dir-buy').className = "bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg";
+      }
+    }
+
+    function switchTab(tabId) {
+      document.getElementById(activeTab).classList.add('hidden');
+      document.getElementById(tabId).classList.remove('hidden');
+
+      const borderMap = {
+        'backtest-tab': 'nav-backtest-tab',
+        'live-tab': 'nav-live-tab',
+        'actual-tab': 'nav-actual-tab',
+        'settings-tab': 'nav-settings-tab'
+      };
+
+      document.getElementById(borderMap[activeTab]).className = "border-b-2 border-transparent py-4 px-1 text-sm font-medium text-slate-500 hover:text-indigo-600 hover:border-indigo-600 transition flex items-center space-x-2 whitespace-nowrap";
+      document.getElementById(borderMap[tabId]).className = "border-b-2 border-indigo-600 py-4 px-1 text-sm font-semibold text-indigo-600 transition flex items-center space-x-2 whitespace-nowrap";
+
+      activeTab = tabId;
+      fetchState();
+    }
+
+    async function fetchState() {
+      try {
+        const response = await fetch('/api/state');
+        const data = await response.json();
+        updateUIState(data.botState);
+      } catch (err) {
+        console.error('Error fetching bot state:', err);
+      }
+    }
+
+    function updateUIState(state) {
+      if (!state) return;
+
+      const pulse = document.getElementById('status-pulse');
+      const dot = document.getElementById('status-dot');
+      const text = document.getElementById('bot-status-text');
+      const mainBtn = document.getElementById('toggle-bot-btn');
+      const liveBtn = document.getElementById('live-toggle-btn');
+      const actualBtn = document.getElementById('actual-toggle-btn');
+
+      if (state.isRunning) {
+        pulse.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+        dot.className = "relative inline-flex rounded-full h-3 w-3 bg-emerald-500";
+        text.innerText = "ACTIVE ALGO BOT";
+        text.className = "text-xs font-bold uppercase tracking-wider text-emerald-600";
+        mainBtn.innerHTML = '<i class="fa-solid fa-stop"></i> <span>STOP ALGO BOT</span>';
+        mainBtn.className = "bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm px-5 py-2 rounded-lg shadow-md transition flex items-center space-x-2";
+        liveBtn.innerHTML = '<i class="fa-solid fa-stop"></i> <span>STOP ALGO BOT</span>';
+        liveBtn.className = "bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition flex items-center space-x-2";
+        actualBtn.innerHTML = '<i class="fa-solid fa-stop"></i> <span>STOP LIVE ACTUAL ALGO</span>';
+        actualBtn.className = "bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition flex items-center space-x-2 shadow-md";
+      } else {
+        pulse.className = "hidden";
+        dot.className = "relative inline-flex rounded-full h-3 w-3 bg-slate-300";
+        text.innerText = "INACTIVE";
+        text.className = "text-xs font-bold uppercase tracking-wider text-slate-500";
+        mainBtn.innerHTML = '<i class="fa-solid fa-play"></i> <span>START ALGO BOT</span>';
+        mainBtn.className = "bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-5 py-2 rounded-lg shadow-md transition flex items-center space-x-2";
+        liveBtn.innerHTML = '<i class="fa-solid fa-play"></i> <span>START ALGO BOT</span>';
+        liveBtn.className = "bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition flex items-center space-x-2";
+        actualBtn.innerHTML = '<i class="fa-solid fa-play"></i> <span>START LIVE ACTUAL ALGO</span>';
+        actualBtn.className = "bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition flex items-center space-x-2 shadow-md";
+      }
+
+      // Live Paper Rendering
+      document.getElementById('live-capital').innerText = `₹${state.capitalInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('live-active-positions').innerText = state.activePositions.length;
+
+      let sumPnl = 0;
+      let floatingPnl = 0;
+      state.tradeHistory.forEach(t => sumPnl += t.netPnlINR);
+      state.activePositions.forEach(p => floatingPnl += p.unrealizedPnl || 0);
+
+      document.getElementById('live-gross-unrealized').innerText = `₹${floatingPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('live-gross-unrealized').className = floatingPnl >= 0 ? "text-2xl font-black text-emerald-600 mt-2" : "text-2xl font-black text-rose-600 mt-2";
+
+      const realizedEl = document.getElementById('live-realized');
+      realizedEl.innerText = `₹${sumPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      if (sumPnl >= 0) {
+        realizedEl.className = "text-2xl font-black text-emerald-600 mt-2";
+      } else {
+        realizedEl.className = "text-2xl font-black text-rose-600 mt-2";
+      }
+
+      // Live Actual Rendering
+      const actualCap = state.actualCapitalInINR !== undefined ? state.actualCapitalInINR : (state.capitalInINR * 0.95);
+      const actualActive = state.actualActivePositions !== undefined ? state.actualActivePositions : [];
+      const actualHistory = state.actualTradeHistory !== undefined ? state.actualTradeHistory : [];
+
+      document.getElementById('actual-capital').innerText = `₹${actualCap.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('actual-active-positions').innerText = actualActive.length;
+
+      let actFloatingPnl = 0;
+      let actRealizedPnl = 0;
+      actualActive.forEach(p => actFloatingPnl += p.unrealizedPnl || 0);
+      actualHistory.forEach(t => actRealizedPnl += t.netPnlINR || 0);
+
+      document.getElementById('actual-gross-unrealized').innerText = `₹${actFloatingPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('actual-gross-unrealized').className = actFloatingPnl >= 0 ? "text-2xl font-black text-emerald-600 mt-2" : "text-2xl font-black text-rose-600 mt-2";
+
+      const actRealizedEl = document.getElementById('actual-realized');
+      actRealizedEl.innerText = `₹${actRealizedPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      actRealizedEl.className = actRealizedPnl >= 0 ? "text-2xl font-black text-emerald-600 mt-2" : "text-2xl font-black text-rose-600 mt-2";
+
+      // Render Positions Paper
+      const posContainer = document.getElementById('live-positions-container');
+      if (state.activePositions.length === 0) {
+        posContainer.innerHTML = `
+          <div class="border-2 border-dashed border-slate-200 rounded-lg p-8 text-center text-sm font-semibold text-slate-400">
+            No active open paper positions. Algo bot will initiate trades once signals trigger.
+          </div>`;
+      } else {
+        posContainer.innerHTML = '';
+        state.activePositions.forEach(p => {
+          const rawPnl = p.unrealizedPnl || 0;
+          const isProfitable = rawPnl >= 0;
+          const colorClass = isProfitable ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50';
+          const indicator = isProfitable ? '+' : '';
+
+          posContainer.innerHTML += `
+            <div class="border border-slate-200 bg-white rounded-lg p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between">
+              <div>
+                <div class="flex items-center space-x-2">
+                  <span class="font-extrabold text-slate-900">${p.ticker}</span>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${p.type === 'BUY' || p.type === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">${p.type}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mt-3 text-xs text-slate-500 font-medium">
+                  <div>Entry Price: <span class="font-bold text-slate-800">$${p.entryPrice.toFixed(2)}</span></div>
+                  <div>Size: <span class="font-bold text-slate-800">${p.size.toFixed(5)}</span></div>
+                  <div>Live Price: <span class="font-bold text-slate-800">$${p.currentPrice.toFixed(2)}</span></div>
+                  <div>Cost (INR): <span class="font-bold text-slate-800">₹${p.entryCostINR.toFixed(2)}</span></div>
+                </div>
+              </div>
+              <div class="mt-4 sm:mt-0 flex items-center space-x-4">
+                <div class="px-4 py-2.5 rounded-lg ${colorClass} text-right">
+                  <div class="text-[10px] font-bold uppercase tracking-wider opacity-75">Unrealized P&L</div>
+                  <div class="text-lg font-black">${indicator}₹${rawPnl.toFixed(2)}</div>
+                </div>
+                <button onclick="manualClose('${p.ticker}', false)" class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2.5 px-4 rounded-lg">
+                  FORCE CLOSE
+                </button>
+              </div>
+            </div>`;
+        });
+      }
+
+      // Render Positions Actual
+      const actualPosContainer = document.getElementById('actual-positions-container');
+      if (actualActive.length === 0) {
+        actualPosContainer.innerHTML = `
+          <div class="border-2 border-dashed border-rose-200 rounded-lg p-8 text-center text-sm font-semibold text-rose-400 bg-rose-50/10">
+            No active actual positions on Alpaca/Binance. Algo will trade safely using real capital keys.
+          </div>`;
+      } else {
+        actualPosContainer.innerHTML = '';
+        actualActive.forEach(p => {
+          const rawPnl = p.unrealizedPnl || 0;
+          const isProfitable = rawPnl >= 0;
+          const colorClass = isProfitable ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50';
+          const indicator = isProfitable ? '+' : '';
+
+          actualPosContainer.innerHTML += `
+            <div class="border border-rose-200 bg-white rounded-lg p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between">
+              <div>
+                <div class="flex items-center space-x-2">
+                  <span class="font-extrabold text-slate-900">${p.ticker}</span>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${p.type === 'BUY' || p.type === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">${p.type}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mt-3 text-xs text-slate-500 font-medium">
+                  <div>Entry Price: <span class="font-bold text-slate-800">$${p.entryPrice.toFixed(2)}</span></div>
+                  <div>Size: <span class="font-bold text-slate-800">${p.size.toFixed(5)}</span></div>
+                  <div>Live Price: <span class="font-bold text-slate-800">$${p.currentPrice.toFixed(2)}</span></div>
+                  <div>Real Cost (INR): <span class="font-bold text-slate-800">₹${p.entryCostINR.toFixed(2)}</span></div>
+                </div>
+              </div>
+              <div class="mt-4 sm:mt-0 flex items-center space-x-4">
+                <div class="px-4 py-2.5 rounded-lg ${colorClass} text-right">
+                  <div class="text-[10px] font-bold uppercase tracking-wider opacity-75">Actual Unrealized P&L</div>
+                  <div class="text-lg font-black">${indicator}₹${rawPnl.toFixed(2)}</div>
+                </div>
+                <button onclick="manualClose('${p.ticker}', true)" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg">
+                  LIQUIDATE POSITION
+                </button>
+              </div>
+            </div>`;
+        });
+      }
+
+      document.getElementById('settings-exchange').value = state.apiConfig.exchange;
+      document.getElementById('settings-api-key').value = state.apiConfig.apiKey || '';
+      document.getElementById('settings-api-secret').value = state.apiConfig.apiSecret || '';
+      document.getElementById('settings-tax-pct').value = state.fees.incomeTaxPct || 30;
+      document.getElementById('settings-tds-pct').value = state.fees.tdsPct || 1;
+      document.getElementById('settings-fee-pct').value = state.fees.exchangeFeePct || 0.1;
+    }
+
+    async function toggleBot() {
+      try {
+        const response = await fetch('/api/state');
+        const data = await response.json();
+        const newState = !data.botState.isRunning;
+
+        const toggleRes = await fetch('/api/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isRunning: newState })
+        });
+        await toggleRes.json();
+
+        const logs = document.getElementById('live-logs-container');
+        const actLogs = document.getElementById('actual-logs-container');
+        const actionText = newState ? "ALGO AUTOMATIC SYSTEM STARTED." : "ALGO AUTOMATIC SYSTEM SUSPENDED.";
+
+        logs.innerHTML += `<p class="text-indigo-400">[SYSTEM] ${actionText}</p>`;
+        logs.scrollTop = logs.scrollHeight;
+        actLogs.innerHTML += `<p class="text-rose-400">[EXCHANGE] ${actionText}</p>`;
+        actLogs.scrollTop = actLogs.scrollHeight;
+
+        fetchState();
+      } catch (err) {
+        console.error('Error toggling bot status:', err);
+      }
+    }
+
+    async function saveDashboardSettings() {
+      const config = {
+        apiConfig: {
+          exchange: document.getElementById('settings-exchange').value,
+          apiKey: document.getElementById('settings-api-key').value,
+          apiSecret: document.getElementById('settings-api-secret').value
+        },
+        fees: {
+          incomeTaxPct: parseFloat(document.getElementById('settings-tax-pct').value),
+          tdsPct: parseFloat(document.getElementById('settings-tds-pct').value),
+          exchangeFeePct: parseFloat(document.getElementById('settings-fee-pct').value)
+        }
+      };
+
+      try {
+        const response = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        const data = await response.json();
+        showToast('Dashboard configuration saved successfully!');
+        updateUIState(data.botState);
+      } catch (err) {
+        showToast('Failed to save settings: ' + err.message, 'error');
+      }
+    }
+
+    async function resetLiveState() {
+      if (!confirm("Are you sure?")) return;
+      try {
+        const response = await fetch('/api/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ startingCapitalInINR: 10000 })
+        });
+        const data = await response.json();
+        showToast('Paper trading logs and capital reset complete!');
+        updateUIState(data.botState);
+      } catch (err) {
+        showToast('Reset failed: ' + err.message, 'error');
+      }
+    }
+
+    async function submitManualTrade() {
+      const payload = {
+        ticker: document.getElementById('manual-ticker').value,
+        type: manualDirection,
+        entryPrice: document.getElementById('manual-price').value
+      };
+
+      try {
+        const response = await fetch('/api/manual_trade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error);
+        }
+        const data = await response.json();
+        showToast('Manual paper trade executed successfully!');
+        updateUIState(data.botState);
+      } catch (err) {
+        showToast('Order execution rejected: ' + err.message, 'error');
+      }
+    }
+
+    async function submitActualTrade() {
+      const payload = {
+        ticker: document.getElementById('actual-ticker-select').value,
+        type: actualManualDirection,
+        entryPrice: document.getElementById('actual-price-input').value,
+        isActual: true
+      };
+
+      try {
+        const response = await fetch('/api/manual_trade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error);
+        }
+        const data = await response.json();
+        showToast('LIVE ACTUAL money trade transmitted successfully!');
+        updateUIState(data.botState);
+      } catch (err) {
+        showToast('Actual Order transmission rejected: ' + err.message, 'error');
+      }
+    }
+
+    async function manualClose(ticker, isActual = false) {
+      if (!confirm(`Are you sure you want to close position on ${ticker}?`)) return;
+      try {
+        const response = await fetch('/api/manual_close', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker, isActual })
+        });
+        const data = await response.json();
+        updateUIState(data.botState);
+        showToast(`Position on ${ticker} exited successfully.`);
+      } catch (err) {
+        showToast('Position exit failed: ' + err.message, 'error');
+      }
+    }
+
+    async function manualCloseAll(isActual = false) {
+      if (!confirm(`Liquidate and close ALL current active positions?`)) return;
+      try {
+        const response = await fetch('/api/manual_close_all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActual })
+        });
+        const data = await response.json();
+        updateUIState(data.botState);
+        showToast(`All active positions closed successfully.`);
+      } catch (err) {
+        showToast('Forced liquidation failed: ' + err.message, 'error');
+      }
+    }
+
+    async function runBacktest(isOptimize = false) {
+      const loader = document.getElementById('loading-overlay');
+      const loaderMsg = document.getElementById('loading-msg');
+      loader.classList.remove('hidden');
+
+      const payload = {
+        tickers: ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD"],
+        startDate: document.getElementById('backtest-start').value,
+        endDate: document.getElementById('backtest-end').value,
+        startingCapitalInINR: parseFloat(document.getElementById('backtest-capital').value),
+        strategyName: document.getElementById('backtest-strategy').value,
+        strategyParams: {},
+        riskManagement: {
+          stopLossPct: parseFloat(document.getElementById('backtest-sl').value),
+          takeProfitPct: parseFloat(document.getElementById('backtest-tp').value)
+        },
+        tradingWindow: {
+          startHour: parseInt(document.getElementById('backtest-window-start').value),
+          endHour: parseInt(document.getElementById('backtest-window-end').value)
+        },
+        granularity: parseInt(document.getElementById('backtest-granularity').value)
+      };
+
+      const url = isOptimize ? '/api/optimize' : '/api/backtest';
+      loaderMsg.innerText = isOptimize ? "Iterating over EMA/RSI/BB strategies to find 80% daily win-rate..." : "Fetching public pricing & calculating transaction tax metrics...";
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          const finalResult = isOptimize ? data.bestResult.result : data.result;
+          if (isOptimize) {
+            showToast(`Optimization complete! Strategy: ${data.bestResult.config.strategyName}, Win Rate: ${finalResult.dailyWinRate.toFixed(2)}%`);
+          } else {
+            showToast('Backtest completed successfully!');
+          }
+          renderBacktestResults(finalResult);
+        } else {
+          showToast('Backtest Engine Error: ' + data.error, 'error');
+        }
+      } catch (err) {
+        showToast('Backtest Execution Failed: ' + err.message, 'error');
+      } finally {
+        loader.classList.add('hidden');
+      }
+    }
+
+    function renderBacktestResults(res) {
+      document.getElementById('metrics-panel').classList.remove('hidden');
+      document.getElementById('analytics-panel').classList.remove('hidden');
+      document.getElementById('trades-panel').classList.remove('hidden');
+
+      const pnlEl = document.getElementById('metric-pnl');
+      pnlEl.innerText = `₹${res.netProfitInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      pnlEl.className = res.netProfitInINR >= 0 ? "text-2xl font-black text-emerald-600" : "text-2xl font-black text-rose-600";
+
+      const pnlPct = (res.netProfitInINR / res.startingCapitalInINR) * 100;
+      const pctEl = document.getElementById('metric-pnl-pct');
+      pctEl.innerText = `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`;
+      pctEl.className = pnlPct >= 0 ? "ml-2 text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full" : "ml-2 text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full";
+
+      document.getElementById('metric-daily-win').innerText = `${res.dailyWinRate.toFixed(2)}%`;
+      document.getElementById('metric-days-ratio').innerText = `${res.profitableDaysCount}/${res.totalDaysCount} Days`;
+
+      document.getElementById('metric-tds').innerText = `₹${res.totalTdsPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('metric-tax').innerText = `₹${res.totalTaxPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('metric-trades-total').innerText = res.totalTrades;
+      document.getElementById('metric-trades-ratio').innerText = `${res.winningTrades} Win / ${res.losingTrades} Loss`;
+
+      document.getElementById('sum-gross-pnl').innerText = `₹${res.totalGrossProfitInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('sum-fees').innerText = `-₹${res.totalExchangeFeesPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('sum-tds').innerText = `-₹${res.totalTdsPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('sum-tax').innerText = `-₹${res.totalTaxPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+      const sumNet = document.getElementById('sum-net-pnl');
+      sumNet.innerText = `₹${res.netProfitInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      sumNet.className = res.netProfitInINR >= 0 ? "text-indigo-600 text-base font-black" : "text-rose-600 text-base font-black";
+
+      document.getElementById('trades-count-text').innerText = `Showing ${res.totalTrades} Executed Trades`;
+      const tableBody = document.getElementById('trades-table-body');
+      tableBody.innerHTML = '';
+
+      if (res.trades.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-slate-400 font-bold">No trades executed in this timeframe with the current technical criteria.</td></tr>`;
+      } else {
+        res.trades.forEach(t => {
+          const rawPnl = t.netPnl * res.usdInrRate;
+          const isProfitable = rawPnl >= 0;
+          const feesTotal = (t.exchangeFees + t.tds + t.incomeTax) * res.usdInrRate;
+
+          tableBody.innerHTML += `
+            <tr class="hover:bg-slate-50 transition">
+              <td class="px-6 py-4 font-extrabold text-slate-900">${t.ticker}</td>
+              <td class="px-6 py-4">
+                <span class="px-2 py-0.5 rounded text-xs font-bold ${t.type === 'LONG' || t.type === 'BUY' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">${t.type}</span>
+              </td>
+              <td class="px-6 py-4 text-xs">
+                <div class="font-bold text-slate-800">$${t.entryPrice.toFixed(2)}</div>
+                <div class="text-slate-400 font-medium mt-0.5">${new Date(t.entryTime).toLocaleString()}</div>
+              </td>
+              <td class="px-6 py-4 text-xs">
+                <div class="font-bold text-slate-800">$${t.exitPrice.toFixed(2)}</div>
+                <div class="text-slate-400 font-medium mt-0.5">${new Date(t.exitTime).toLocaleString()}</div>
+              </td>
+              <td class="px-6 py-4 text-xs font-bold text-slate-500">${t.exitReason}</td>
+              <td class="px-6 py-4 text-right text-xs font-semibold text-rose-500">-₹${feesTotal.toFixed(2)}</td>
+              <td class="px-6 py-4 text-right font-black ${isProfitable ? 'text-emerald-600' : 'text-rose-600'}">
+                ${isProfitable ? '+' : ''}₹${rawPnl.toFixed(2)}
+              </td>
+            </tr>`;
+        });
+      }
+
+      if (myChart) {
+        myChart.destroy();
+      }
+
+      const labels = [];
+      const dataPoints = [];
+      let currentCap = res.startingCapitalInINR;
+
+      labels.push('Start');
+      dataPoints.push(currentCap);
+
+      res.dailyPnLList.forEach(day => {
+        labels.push(day.date);
+        currentCap += day.netPnlInINR;
+        dataPoints.push(currentCap);
+      });
+
+      const ctx = document.getElementById('equityChart').getContext('2d');
+      myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Capital Balance (INR)',
+            data: dataPoints,
+            borderColor: '#4f46e5',
+            backgroundColor: 'rgba(79, 70, 229, 0.05)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.1,
+            pointRadius: res.dailyPnLList.length > 30 ? 0 : 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { maxTicksLimit: 12, font: { weight: 'bold', size: 10 } }
+            },
+            y: {
+              ticks: { font: { weight: 'bold', size: 10 } }
+            }
+          }
+        }
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchState();
+      setInterval(fetchState, 3000);
+    });
+  </script>
+</body>
+</html>

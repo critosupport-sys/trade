@@ -1,0 +1,16 @@
+{
+  "name": "crypto-intraday-bot",
+  "version": "1.0.0",
+  "description": "Legit Intraday Trading Bot and Backtesting Dashboard with Indian Taxes and Multi-Asset Portfolio optimization",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-strategies.js && node test-backtester.js && node test-persistence.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.16.0",
+    "node-fetch": "^2.7.0",
+    "archiver": "^6.0.1"
+  }
+}
