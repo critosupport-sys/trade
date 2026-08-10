@@ -297,16 +297,21 @@ async function runTick() {
             continue;
           }
 
+          // Enforce strict limit of maximum 5 trades per calendar day
+          const todayStr = new Date(now + (5.5 * 3600 * 1000)).toISOString().slice(0, 10);
+          const paperTradesToday = botState.tradeHistory.filter(t => new Date(t.entryTime + (5.5 * 3600 * 1000)).toISOString().slice(0, 10) === todayStr).length + botState.activePositions.length;
+          const actualTradesToday = botState.actualTradeHistory.filter(t => new Date(t.entryTime + (5.5 * 3600 * 1000)).toISOString().slice(0, 10) === todayStr).length + botState.actualActivePositions.length;
+
           const livePrice = await fetchLivePrice(ticker);
           if (livePrice) {
-            // Place Paper Position
-            if (isPaperAllowed) {
+            // Place Paper Position if under daily max 5 limit
+            if (isPaperAllowed && paperTradesToday < 5) {
               const allocCapitalINR = (botState.capitalInINR * 0.8) / (MAX_POSITIONS - botState.activePositions.length);
               const allocUSD = allocCapitalINR / botState.usdInrRate;
               await placeSpotOrder(ticker, signal, livePrice, allocUSD, false);
             }
-            // Place Actual Position
-            if (isActualAllowed) {
+            // Place Actual Position if under daily max 5 limit
+            if (isActualAllowed && actualTradesToday < 5) {
               const allocCapitalINR = (botState.actualCapitalInINR * 0.8) / (MAX_POSITIONS - botState.actualActivePositions.length);
               const allocUSD = allocCapitalINR / botState.usdInrRate;
               await placeSpotOrder(ticker, signal, livePrice, allocUSD, true);

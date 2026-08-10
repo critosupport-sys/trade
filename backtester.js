@@ -379,8 +379,21 @@ async function backtestPortfolio({
   const maxConcurrentTrades = 3;
   const tradeAllocationPct = 0.30; // Allocate 30% of total portfolio value per trade
 
+  // Daily trade counter to enforce strict maximum 5 trades per calendar day
+  const dailyTradeCounts = {};
+
   // Chronological simulation loop
   for (const ts of timestamps) {
+    // Determine the calendar date in Indian Standard Time (UTC+5.5 hours)
+    const istDate = new Date(ts + (5.5 * 3600 * 1000));
+    const dateStr = istDate.getUTCFullYear() + "-" +
+                    String(istDate.getUTCMonth() + 1).padStart(2, '0') + "-" +
+                    String(istDate.getUTCDate()).padStart(2, '0');
+
+    if (!dailyTradeCounts[dateStr]) {
+      dailyTradeCounts[dateStr] = 0;
+    }
+
     // 1. Calculate current total portfolio equity
     let activePositionsValueUSD = 0;
     for (const pos of activePositions) {
@@ -464,10 +477,11 @@ async function backtestPortfolio({
       }
     }
 
-    // 3. Second, check for new entries if space is available (up to maxConcurrentTrades)
-    if (activePositions.length < maxConcurrentTrades && isWithinTradingWindow(ts, tradingWindow.startHour, tradingWindow.endHour)) {
+    // 3. Second, check for new entries if space is available (up to maxConcurrentTrades) and we haven't hit our daily maximum of 5 trades
+    if (activePositions.length < maxConcurrentTrades && isWithinTradingWindow(ts, tradingWindow.startHour, tradingWindow.endHour) && dailyTradeCounts[dateStr] < 5) {
       for (const ticker of tickers) {
         if (activePositions.length >= maxConcurrentTrades) break;
+        if (dailyTradeCounts[dateStr] >= 5) break;
         // Avoid opening duplicate positions on the same asset
         if (activePositions.some(p => p.ticker === ticker)) continue;
 
@@ -499,6 +513,9 @@ async function backtestPortfolio({
             size,
             entryCostUSD: actualAllocationUSD
           });
+
+          // Increment daily trade counter
+          dailyTradeCounts[dateStr]++;
         }
       }
     }
