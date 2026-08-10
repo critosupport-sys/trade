@@ -27,8 +27,8 @@
           <i class="fa-solid fa-robot text-xl"></i>
         </div>
         <div>
-          <h1 class="text-xl font-extrabold tracking-tight text-slate-950">INTRADAY BOT<span class="text-indigo-600 font-medium font-mono text-xs ml-1.5 px-2 py-0.5 bg-indigo-50 rounded-full">v2.0</span></h1>
-          <p class="text-xs text-slate-500 font-medium">Auto-Optimizer, Paper Trading & Live Actual Trading</p>
+            <h1 class="text-xl font-extrabold tracking-tight text-slate-950">INDIAN INTRADAY BOT<span class="text-indigo-600 font-medium font-mono text-xs ml-1.5 px-2 py-0.5 bg-indigo-50 rounded-full">v2.0</span></h1>
+            <p class="text-xs text-slate-500 font-medium">9 AM to 3 PM Intraday Stock Optimizer, Paper Trading & Live Actual Trading (Dhan App)</p>
         </div>
       </div>
 
@@ -91,17 +91,18 @@
 
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Range Start</label>
-            <input type="date" id="backtest-start" value="2026-02-06" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+            <input type="date" id="backtest-start" value="2026-06-01" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
           </div>
 
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Range End</label>
-            <input type="date" id="backtest-end" value="2026-08-06" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+            <input type="date" id="backtest-end" value="2026-07-31" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
           </div>
 
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Technical Strategy</label>
             <select id="backtest-strategy" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <option value="PRO_INTRADAY" selected>Pro Indian Intraday (No Scalping)</option>
               <option value="SELECTIVE">Super Selective Trend (Best Return)</option>
               <option value="EMA">EMA Crossover (9 vs 21)</option>
               <option value="RSI">RSI Mean Reversion (30-70)</option>
@@ -114,8 +115,8 @@
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Custom Resolution</label>
             <select id="backtest-granularity" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <option value="900" selected>15 Minutes (Precise Entries)</option>
               <option value="3600">1 Hour (Recommended/Trend)</option>
-              <option value="900">15 Minutes (Precise Entries)</option>
               <option value="300">5 Minutes (Ultra High-Precision)</option>
             </select>
           </div>
@@ -123,21 +124,21 @@
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Daily Trading Window</label>
             <div class="flex items-center space-x-2">
-              <input type="number" id="backtest-window-start" value="0" min="0" max="24" class="text-center block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <input type="number" id="backtest-window-start" value="9" min="0" max="24" class="text-center block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
               <span class="text-slate-400 font-bold">to</span>
-              <input type="number" id="backtest-window-end" value="24" min="0" max="24" class="text-center block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
-              <span class="text-xs font-bold text-slate-400">HRS UTC (24H Format)</span>
+              <input type="number" id="backtest-window-end" value="15" min="0" max="24" class="text-center block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <span class="text-xs font-bold text-slate-400">HRS IST (9 AM to 3 PM)</span>
             </div>
           </div>
 
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Stop Loss (%)</label>
-            <input type="number" step="0.1" id="backtest-sl" value="2.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+            <input type="number" step="0.1" id="backtest-sl" value="1.5" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
           </div>
 
           <div>
             <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Take Profit (%)</label>
-            <input type="number" step="0.1" id="backtest-tp" value="8.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
+            <input type="number" step="0.1" id="backtest-tp" value="5.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100">
           </div>
         </div>
 
@@ -160,7 +161,7 @@
       <!-- Metrics Stats Banner -->
       <div id="metrics-panel" class="hidden grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
         <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Profit (Post-Tax)</span>
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Profit (Post-Fees)</span>
           <div class="mt-2 flex items-baseline">
             <span id="metric-pnl" class="text-2xl font-black">₹0</span>
             <span id="metric-pnl-pct" class="ml-2 text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">+0%</span>
@@ -178,19 +179,19 @@
         </div>
 
         <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">TDS Retained (1%)</span>
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">TDS (Stock Market)</span>
           <div class="mt-2 flex items-baseline">
             <span id="metric-tds" class="text-2xl font-black text-amber-600">₹0</span>
           </div>
-          <span class="text-[10px] text-slate-400 mt-1">Indian TDS on sell value</span>
+            <span class="text-[10px] text-slate-400 mt-1">0% TDS applies to Stocks</span>
         </div>
 
         <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Indian Flat Tax (30%)</span>
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Dhan Flat Brokerage</span>
           <div class="mt-2 flex items-baseline">
             <span id="metric-tax" class="text-2xl font-black text-rose-600">₹0</span>
           </div>
-          <span class="text-[10px] text-slate-400 mt-1">30% per profit trade (no offset)</span>
+            <span class="text-[10px] text-slate-400 mt-1">Flat ₹10 per executed trade</span>
         </div>
 
         <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between">
@@ -341,13 +342,13 @@
           </h3>
           <div class="space-y-4">
             <div>
-              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Cryptocurrency Asset</label>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Indian Stock Asset</label>
               <select id="manual-ticker" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
-                <option value="BTC-USD">Bitcoin (BTC-USD)</option>
-                <option value="ETH-USD">Ethereum (ETH-USD)</option>
-                <option value="SOL-USD">Solana (SOL-USD)</option>
-                <option value="ADA-USD">Cardano (ADA-USD)</option>
-                <option value="DOGE-USD">Dogecoin (DOGE-USD)</option>
+                <option value="RELIANCE">Reliance Industries (RELIANCE)</option>
+                <option value="TCS">Tata Consultancy Services (TCS)</option>
+                <option value="INFY">Infosys (INFY)</option>
+                <option value="HDFCBANK">HDFC Bank (HDFCBANK)</option>
+                <option value="ICICIBANK">ICICI Bank (ICICIBANK)</option>
               </select>
             </div>
 
@@ -360,8 +361,8 @@
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Simulated Entry Price (USD)</label>
-              <input type="number" id="manual-price" value="65000" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Simulated Entry Price (INR)</label>
+              <input type="number" id="manual-price" value="2500" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
             </div>
 
             <button onclick="submitManualTrade()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-3 px-6 rounded-lg shadow transition flex items-center justify-center space-x-2">
@@ -456,11 +457,12 @@
           </h3>
           <div class="space-y-4">
             <div>
-              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Crypto Asset Pair</label>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Indian Stock Asset</label>
               <select id="actual-ticker-select" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
-                <option value="BTC-USD">BTC-USD</option>
-                <option value="ETH-USD">ETH-USD</option>
-                <option value="SOL-USD">SOL-USD</option>
+                <option value="RELIANCE">RELIANCE</option>
+                <option value="TCS">TCS</option>
+                <option value="INFY">INFY</option>
+                <option value="HDFCBANK">HDFCBANK</option>
               </select>
             </div>
 
@@ -473,8 +475,8 @@
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Real Price Trigger (USD)</label>
-              <input type="number" id="actual-price-input" value="65000" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Real Price Trigger (INR)</label>
+              <input type="number" id="actual-price-input" value="2500" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
             </div>
 
             <button onclick="submitActualTrade()" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm py-3 px-6 rounded-lg shadow-md transition flex items-center justify-center space-x-2">
@@ -530,9 +532,9 @@
             <div>
               <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Exchange / Broker Connection</label>
               <select id="settings-exchange" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
-                <option value="binance_demo">Binance Demo / Paper account (No credentials required)</option>
+                <option value="dhan" selected>Dhan App / Indian Stock Market (Flat ₹10 round-trip fee)</option>
+                <option value="binance_demo">Binance Demo / Paper account</option>
                 <option value="alpaca">Alpaca Paper / Live API</option>
-                <option value="binance_live">Binance Live API Account</option>
               </select>
             </div>
 
@@ -550,24 +552,24 @@
           <!-- Strategy details -->
           <div class="space-y-4">
             <h3 class="text-sm font-bold text-slate-800 border-b border-slate-50 pb-2 flex items-center space-x-1.5">
-              <i class="fa-solid fa-chart-bar text-indigo-500"></i> <span>Customizable Taxes & Fee Matrix (Indian Crypto Rules)</span>
+              <i class="fa-solid fa-chart-bar text-indigo-500"></i> <span>Dhan Brokerage & Stock Tax Settings (Indian Stock Market)</span>
             </h3>
 
             <div>
-              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Flat Capital Gains Tax (%)</label>
-              <input type="number" step="1" id="settings-tax-pct" value="30" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
-              <span class="text-[10px] text-slate-400">Flat 30% tax on gains per trade with absolutely NO loss offsetting in India</span>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Round-Trip Brokerage (₹)</label>
+              <input type="number" step="1" id="settings-tax-pct" value="10" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none" disabled>
+              <span class="text-[10px] text-slate-400">Flat ₹10 per completed round-trip trade (₹5 buy order, ₹5 sell order)</span>
             </div>
 
             <div>
               <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">TDS on Sale/Exit transactions (%)</label>
-              <input type="number" step="0.1" id="settings-tds-pct" value="1.0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
-              <span class="text-[10px] text-slate-400">1% Tax Deducted at Source (TDS) on exit total gross transaction volume</span>
+              <input type="number" step="0.1" id="settings-tds-pct" value="0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none" disabled>
+              <span class="text-[10px] text-slate-400">0% TDS applies to standard Indian equity intraday stock trading</span>
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Exchange Trading Fee (%)</label>
-              <input type="number" step="0.01" id="settings-fee-pct" value="0.1" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none">
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">STT / Exchange Transaction Fee (%)</label>
+              <input type="number" step="0.01" id="settings-fee-pct" value="0" class="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold focus:border-indigo-500 focus:bg-white focus:outline-none" disabled>
             </div>
           </div>
         </div>
@@ -771,9 +773,9 @@
                   <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${p.type === 'BUY' || p.type === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">${p.type}</span>
                 </div>
                 <div class="grid grid-cols-2 gap-4 mt-3 text-xs text-slate-500 font-medium">
-                  <div>Entry Price: <span class="font-bold text-slate-800">$${p.entryPrice.toFixed(2)}</span></div>
+                  <div>Entry Price: <span class="font-bold text-slate-800">₹${p.entryPrice.toFixed(2)}</span></div>
                   <div>Size: <span class="font-bold text-slate-800">${p.size.toFixed(5)}</span></div>
-                  <div>Live Price: <span class="font-bold text-slate-800">$${p.currentPrice.toFixed(2)}</span></div>
+                  <div>Live Price: <span class="font-bold text-slate-800">₹${p.currentPrice.toFixed(2)}</span></div>
                   <div>Cost (INR): <span class="font-bold text-slate-800">₹${p.entryCostINR.toFixed(2)}</span></div>
                 </div>
               </div>
@@ -1001,7 +1003,7 @@
       loader.classList.remove('hidden');
 
       const payload = {
-        tickers: ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD"],
+        tickers: ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"],
         startDate: document.getElementById('backtest-start').value,
         endDate: document.getElementById('backtest-end').value,
         startingCapitalInINR: parseFloat(document.getElementById('backtest-capital').value),
@@ -1065,7 +1067,7 @@
       document.getElementById('metric-days-ratio').innerText = `${res.profitableDaysCount}/${res.totalDaysCount} Days`;
 
       document.getElementById('metric-tds').innerText = `₹${res.totalTdsPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-      document.getElementById('metric-tax').innerText = `₹${res.totalTaxPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      document.getElementById('metric-tax').innerText = `₹${res.totalExchangeFeesPaidInINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
       document.getElementById('metric-trades-total').innerText = res.totalTrades;
       document.getElementById('metric-trades-ratio').innerText = `${res.winningTrades} Win / ${res.losingTrades} Loss`;
 
@@ -1097,11 +1099,11 @@
                 <span class="px-2 py-0.5 rounded text-xs font-bold ${t.type === 'LONG' || t.type === 'BUY' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">${t.type}</span>
               </td>
               <td class="px-6 py-4 text-xs">
-                <div class="font-bold text-slate-800">$${t.entryPrice.toFixed(2)}</div>
+                <div class="font-bold text-slate-800">₹${t.entryPrice.toFixed(2)}</div>
                 <div class="text-slate-400 font-medium mt-0.5">${new Date(t.entryTime).toLocaleString()}</div>
               </td>
               <td class="px-6 py-4 text-xs">
-                <div class="font-bold text-slate-800">$${t.exitPrice.toFixed(2)}</div>
+                <div class="font-bold text-slate-800">₹${t.exitPrice.toFixed(2)}</div>
                 <div class="text-slate-400 font-medium mt-0.5">${new Date(t.exitTime).toLocaleString()}</div>
               </td>
               <td class="px-6 py-4 text-xs font-bold text-slate-500">${t.exitReason}</td>

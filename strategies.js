@@ -1,18 +1,14 @@
 // Technical indicators and strategies module
 const fetch = require('node-fetch');
 
-// Define 100+ popular crypto pairs from Coinbase
+// Define 50+ popular Indian stock tickers (Nifty 50)
 const POPULAR_TICKERS = [
-  "BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "AVAX-USD", "LINK-USD", "MATIC-USD",
-  "SHIB-USD", "LTC-USD", "UNI-USD", "ICP-USD", "NEAR-USD", "FIL-USD", "IMX-USD", "ALGO-USD", "GRT-USD", "RNDR-USD",
-  "STX-USD", "FET-USD", "ATOM-USD", "VET-USD", "HBAR-USD", "AAVE-USD", "OP-USD", "EGLD-USD", "SAND-USD", "MANA-USD",
-  "THETA-USD", "EOS-USD", "XTZ-USD", "FLOW-USD", "FTM-USD", "CHZ-USD", "XEC-USD", "AXS-USD", "MKR-USD", "CRV-USD",
-  "LDO-USD", "MINA-USD", "EGLD-USD", "GALA-USD", "SNX-USD", "ONE-USD", "ANKR-USD", "WOO-USD", "ZIL-USD", "BAT-USD",
-  "JST-USD", "RVN-USD", "KNC-USD", "SUSHI-USD", "YFI-USD", "BAL-USD", "COMP-USD", "ZRX-USD", "OMG-USD", "LRC-USD",
-  "REN-USD", "BAND-USD", "UMA-USD", "RLC-USD", "KAVA-USD", "1INCH-USD", "API3-USD", "ENS-USD", "DYDX-USD", "CELO-USD",
-  "GLMR-USD", "MOVR-USD", "BICO-USD", "ACH-USD", "PERP-USD", "MASK-USD", "STORJ-USD", "GTC-USD", "SPELL-USD", "FORTH-USD",
-  "BOND-USD", "CLV-USD", "QSP-USD", "POWR-USD", "REQ-USD", "REQ-USD", "LCX-USD", "DESO-USD", "POND-USD", "OXT-USD",
-  "MIR-USD", "TRB-USD", "BADGER-USD", "NKN-USD", "POLY-USD", "LOOM-USD", "NMR-USD", "SUPER-USD", "DNT-USD", "CVC-USD"
+  "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "BHARTIARTL", "SBIN", "LICI", "KOTAKBANK", "LT",
+  "ITC", "HINDUNILVR", "AXISBANK", "BAJFINANCE", "MARUTI", "SUNPHARMA", "ADANIENT", "TATAMOTORS", "ONGC", "NTPC",
+  "COALINDIA", "POWERGRID", "JSWSTEEL", "TATASTEEL", "ULTRACEMCO", "TITAN", "GRASIM", "HINDALCO", "NESTLEIND", "TECHM",
+  "ADANIPORTS", "WIPRO", "BPCL", "INDUSINDBK", "BAJAJFINSV", "HDFCLIFE", "SBILIFE", "BRITANNIA", "EICHERMOT", "DIVISLAB",
+  "APOLLOHOSP", "HEROMOTOCO", "CIPLA", "DRREDDY", "LTIM", "TATACONSUM", "JIOFIN", "ADANIPOWER", "HAL", "BEL",
+  "TRENT", "CHOLAFIN", "DLF", "VBL", "SHRIRAMFIN"
 ];
 
 // Technical Indicators
@@ -310,6 +306,59 @@ function getSuperSelectiveSignals(candles) {
   return { signals, indicators: { ema9, ema21, ema50, rsi } };
 }
 
+// Professional Intraday Multi-Strategy Signal Generator (No Scalping)
+function getProIntradaySignals(candles) {
+  const closes = candles.map(c => c.close);
+  const volumes = candles.map(c => c.volume);
+
+  const ema9 = calculateEMA(closes, 9);
+  const ema21 = calculateEMA(closes, 21);
+  const ema50 = calculateEMA(closes, 50); // macro trend filter
+  const rsi = calculateRSI(closes, 14);
+  const avgVolume = calculateSMA(volumes, 10); // volume breakout filter
+  const { upper, lower } = calculateBollingerBands(closes, 20, 2);
+
+  const signals = Array(candles.length).fill('HOLD');
+
+  for (let i = 1; i < candles.length; i++) {
+    if (ema9[i] === null || ema21[i] === null || ema50[i] === null || rsi[i] === null || avgVolume[i] === null || upper[i] === null || lower[i] === null) {
+      continue;
+    }
+
+    // 1. PRO BUY/LONG CRITERIA (Golden Trend Breakout):
+    // - Trend structure is bullish: EMA 9 > EMA 21 and Close > EMA 50
+    // - RSI (14) is in rising bullish territory (between 42 and 68)
+    // - Momentum triggers on EMA crossover, price breakout above EMA 9, or RSI breaking above 42
+    // - Volume confirms momentum (at least 90% of rolling average)
+    if (ema9[i] > ema21[i] && closes[i] > ema50[i]) {
+      if (rsi[i] >= 42 && rsi[i] <= 68) {
+        if ((ema9[i-1] <= ema21[i-1] && ema9[i] > ema21[i]) || (closes[i-1] <= ema9[i-1] && closes[i] > ema9[i]) || (rsi[i-1] < 42 && rsi[i] >= 42)) {
+          if (volumes[i] >= avgVolume[i] * 0.9) {
+            signals[i] = 'BUY';
+          }
+        }
+      }
+    }
+
+    // 2. PRO SELL/SHORT CRITERIA (Death Trend Breakdown):
+    // - Trend structure is bearish: EMA 9 < EMA 21 and Close < EMA 50
+    // - RSI (14) is in declining bearish territory (between 32 and 58)
+    // - Momentum triggers on EMA breakdown, price breakout below EMA 9, or RSI breaking below 58
+    // - Volume confirms momentum (at least 90% of rolling average)
+    if (ema9[i] < ema21[i] && closes[i] < ema50[i]) {
+      if (rsi[i] >= 32 && rsi[i] <= 58) {
+        if ((ema9[i-1] >= ema21[i-1] && ema9[i] < ema21[i]) || (closes[i-1] >= ema9[i-1] && closes[i] < ema9[i]) || (rsi[i-1] > 58 && rsi[i] <= 58)) {
+          if (volumes[i] >= avgVolume[i] * 0.9) {
+            signals[i] = 'SELL';
+          }
+        }
+      }
+    }
+  }
+
+  return { signals, indicators: { ema9, ema21, ema50, rsi, upper, lower } };
+}
+
 module.exports = {
   POPULAR_TICKERS,
   fetchCandles,
@@ -320,5 +369,6 @@ module.exports = {
   getEMACrossoverSignals,
   getRSIMeanReversionSignals,
   getBollingerBandsSignals,
-  getSuperSelectiveSignals
+  getSuperSelectiveSignals,
+  getProIntradaySignals
 };
