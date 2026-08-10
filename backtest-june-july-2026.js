@@ -19,8 +19,8 @@ async function runJuneJuly2026Backtest() {
     startDate: realNSEStartDate,
     endDate: realNSEEndDate,
     startingCapitalInINR: startingCapital,
-    strategyName: "PRO_INTRADAY",
-    riskManagement: { stopLossPct: 1.5, takeProfitPct: 5.0 },
+    strategyName: "SELECTIVE",
+    riskManagement: { stopLossPct: 2.0, takeProfitPct: 0.8 },
     tradingWindow: { startHour: 9.0, endHour: 15.0 },
     useRealApiData: true,
     granularity: 3600 // hourly candles for stable, professional intraday signals on NSE
@@ -40,8 +40,8 @@ async function runJuneJuly2026Backtest() {
     startDate: realNSEStartDate,
     endDate: realNSEEndDate,
     startingCapitalInINR: startingCapitalLarge,
-    strategyName: "PRO_INTRADAY",
-    riskManagement: { stopLossPct: 1.5, takeProfitPct: 5.0 },
+    strategyName: "SELECTIVE",
+    riskManagement: { stopLossPct: 2.0, takeProfitPct: 0.8 },
     tradingWindow: { startHour: 9.0, endHour: 15.0 },
     useRealApiData: true,
     granularity: 3600 // hourly candles for stable, professional intraday signals on NSE

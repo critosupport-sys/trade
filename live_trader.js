@@ -26,7 +26,7 @@ let botState = {
   },
   tradingWindow: { startHour: 9, endHour: 15 }, // IST 9:00 AM to 3:00 PM
   strategyConfig: {
-    strategyName: 'PRO_INTRADAY', // Default to professional multi-indicator strategy
+    strategyName: 'SELECTIVE', // Default to professional selective strategy for high-frequency stock trades
     shortPeriod: 9,
     longPeriod: 21,
     period: 14,
@@ -34,8 +34,8 @@ let botState = {
     oversold: 30,
     bbPeriod: 20,
     bbMultiplier: 2.0,
-    stopLossPct: 1.5,
-    takeProfitPct: 5.0
+    stopLossPct: 2.0,
+    takeProfitPct: 0.8
   },
   fees: {
     exchangeFeePct: 0.0,
