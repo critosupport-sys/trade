@@ -167,6 +167,9 @@ async function fetchCandles(ticker, granularity = 3600, startTime = null, endTim
       }
       const data = await res.json();
       const result = data.chart?.result?.[0];
+      if (data.chart?.error) {
+        throw new Error(`Yahoo API Error: ${data.chart.error.description || JSON.stringify(data.chart.error)}`);
+      }
       if (!result || !result.timestamp) {
         throw new Error("No data returned or empty timestamps array");
       }
@@ -202,7 +205,7 @@ async function fetchCandles(ticker, granularity = 3600, startTime = null, endTim
       console.log(`[YAHOO-DATA] Successfully fetched ${candles.length} real NSE stock candles for ${symbol}.`);
       return candles.sort((a, b) => a.time - b.time);
     } catch (err) {
-      console.warn(`[YAHOO-DATA] Yahoo Finance API fetch failed: ${err.message}. Falling back to high-fidelity market simulator.`);
+      console.error(`[YAHOO-DATA] Yahoo Finance API fetch failed: ${err.message}.`);
       return [];
     }
   }
@@ -388,13 +391,12 @@ function getProIntradaySignals(candles) {
     }
 
     // 1. PRO BUY/LONG CRITERIA (Golden Trend Breakout):
-    // - Relaxed RSI (30 to 78) and broader trigger filters to catch high-quality daily momentum
-    if (ema9[i] > ema21[i]) {
-      if (rsi[i] >= 35 && rsi[i] <= 78) {
-        // Trigger on any active breakout of EMA9 or RSI turning positive
-        if ((ema9[i-1] <= ema21[i-1] && ema9[i] > ema21[i]) || (closes[i-1] <= ema9[i-1] && closes[i] > ema9[i]) || (rsi[i-1] < 38 && rsi[i] >= 38)) {
-          // Relaxed volume filter to 0.4x to guarantee high daily activity
-          if (volumes[i] >= avgVolume[i] * 0.4) {
+    // - Quality check: Price must be above the 50 EMA trend filter.
+    // - Strong momentum: RSI must be in active rising zone (45 to 68) and EMA9 > EMA21.
+    if (ema9[i] > ema21[i] && closes[i] > ema50[i]) {
+      if (rsi[i] >= 45 && rsi[i] <= 68) {
+        if (ema9[i-1] <= ema21[i-1] && ema9[i] > ema21[i]) {
+          if (volumes[i] >= avgVolume[i] * 1.0) {
             signals[i] = 'BUY';
           }
         }
@@ -402,10 +404,12 @@ function getProIntradaySignals(candles) {
     }
 
     // 2. PRO SELL/SHORT CRITERIA (Death Trend Breakdown):
-    if (ema9[i] < ema21[i]) {
-      if (rsi[i] >= 22 && rsi[i] <= 65) {
-        if ((ema9[i-1] >= ema21[i-1] && ema9[i] < ema21[i]) || (closes[i-1] >= ema9[i-1] && closes[i] < ema9[i]) || (rsi[i-1] > 62 && rsi[i] <= 62)) {
-          if (volumes[i] >= avgVolume[i] * 0.4) {
+    // - Quality check: Price must be below the 50 EMA trend filter.
+    // - Strong momentum: RSI must be in active declining zone (32 to 55) and EMA9 < EMA21.
+    if (ema9[i] < ema21[i] && closes[i] < ema50[i]) {
+      if (rsi[i] >= 32 && rsi[i] <= 55) {
+        if (ema9[i-1] >= ema21[i-1] && ema9[i] < ema21[i]) {
+          if (volumes[i] >= avgVolume[i] * 1.0) {
             signals[i] = 'SELL';
           }
         }

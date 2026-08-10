@@ -320,12 +320,16 @@ async function backtestPortfolio({
       const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
       const end = endDate ? new Date(endDate) : new Date();
       candles = await fetchCandles(ticker, granularity, start, end);
-    }
 
-    if (!candles || candles.length === 0) {
+      if (!candles || candles.length === 0) {
+        throw new Error(`[CRITICAL] Failed to fetch real candle data for ${ticker} from the live stock market API. Simulation fallback is completely disabled.`);
+      }
+    } else {
+      // Use simulator only for fast offline test suites (where useRealApiData: false is explicitly set)
       const days = startDate ? Math.ceil((new Date(endDate || Date.now()) - new Date(startDate)) / (24 * 3600 * 1000)) : 180;
       candles = generateSimulatedCandles(ticker, days, granularity);
     }
+
     allCandlesByTicker[ticker] = candles;
 
     // Generate signals for this asset
