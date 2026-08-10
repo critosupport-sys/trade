@@ -135,22 +135,85 @@ function calculateBollingerBands(data, period = 20, multiplier = 2) {
   return { middle: sma, upper, lower };
 }
 
-// Fetch historical candles from Coinbase Pro API with intelligent chunking
-// Since Coinbase Pro only returns up to 300 candles per request, this function
-// automatically fetches in sequential chunks to cover the entire range safely
+// Fetch historical candles from Coinbase Pro (for crypto) or Yahoo Finance (for Indian Stocks)
 async function fetchCandles(ticker, granularity = 3600, startTime = null, endTime = null) {
-  const headers = { 'User-Agent': 'Mozilla/5.0' };
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  };
 
   const startMs = startTime ? new Date(startTime).getTime() : Date.now() - 30 * 24 * 3600 * 1000;
   const endMs = endTime ? new Date(endTime).getTime() : Date.now();
 
-  const chunkSpanMs = 300 * granularity * 1000; // Time covered by 300 candles
+  const isStock = POPULAR_TICKERS.includes(ticker) || ticker.endsWith('.NS');
+
+  if (isStock) {
+    const symbol = ticker.endsWith('.NS') ? ticker : `${ticker}.NS`;
+    // Map standard seconds granularity to Yahoo interval strings
+    let interval = '1d';
+    if (granularity === 60) interval = '1m';
+    else if (granularity === 300) interval = '5m';
+    else if (granularity === 900) interval = '15m';
+    else if (granularity === 3600) interval = '1h';
+
+    const p1 = Math.floor(startMs / 1000);
+    const p2 = Math.floor(endMs / 1000);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${p1}&period2=${p2}&interval=${interval}`;
+
+    console.log(`[YAHOO-DATA] Fetching Indian Stock data for ${symbol} from NSE...`);
+    try {
+      const res = await fetch(url, { headers, timeout: 8000 });
+      if (!res.ok) {
+        throw new Error(`Yahoo HTTP Error ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      const result = data.chart?.result?.[0];
+      if (!result || !result.timestamp) {
+        throw new Error("No data returned or empty timestamps array");
+      }
+
+      const timestamps = result.timestamp;
+      const quote = result.indicators?.quote?.[0];
+      if (!quote) throw new Error("No quotes found in Yahoo response");
+
+      const candles = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        // Ensure candle fields are fully valid numbers
+        const open = parseFloat(quote.open?.[i]);
+        const high = parseFloat(quote.high?.[i]);
+        const low = parseFloat(quote.low?.[i]);
+        const close = parseFloat(quote.close?.[i]);
+        const volume = parseFloat(quote.volume?.[i]);
+
+        if (!isNaN(open) && !isNaN(high) && !isNaN(low) && !isNaN(close)) {
+          // Yahoo prices are already in INR, convert to simulated base USD internally
+          // because backtesting framework uses base USD internally and multiplies at the exit
+          const USD_INR_RATE = 83.5;
+          candles.push({
+            time: timestamps[i] * 1000,
+            open: open / USD_INR_RATE,
+            high: high / USD_INR_RATE,
+            low: low / USD_INR_RATE,
+            close: close / USD_INR_RATE,
+            volume: volume || 0
+          });
+        }
+      }
+
+      console.log(`[YAHOO-DATA] Successfully fetched ${candles.length} real NSE stock candles for ${symbol}.`);
+      return candles.sort((a, b) => a.time - b.time);
+    } catch (err) {
+      console.warn(`[YAHOO-DATA] Yahoo Finance API fetch failed: ${err.message}. Falling back to high-fidelity market simulator.`);
+      return [];
+    }
+  }
+
+  // Fallback / standard Coinbase Pro Fetch for Cryptocurrencies
+  const chunkSpanMs = 300 * granularity * 1000;
   let currentStart = startMs;
   let allCandles = [];
 
   console.log(`[DATA FETCH] Fetching real historical data for ${ticker} from ${new Date(startMs).toLocaleDateString()} to ${new Date(endMs).toLocaleDateString()}...`);
 
-  // Max safety: limit to 25 chunks (~7500 candles) to prevent excessive loading
   let chunksCount = 0;
   while (currentStart < endMs && chunksCount < 25) {
     chunksCount++;
@@ -193,11 +256,10 @@ async function fetchCandles(ticker, granularity = 3600, startTime = null, endTim
     }
 
     if (!success) break;
-    currentStart = currentEnd + 1000; // move start forward by 1s
-    await new Promise(resolve => setTimeout(resolve, 300)); // sleep to prevent rate limiting
+    currentStart = currentEnd + 1000;
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 
-  // Sort and remove duplicates
   const uniqueCandles = [];
   const seenTimes = new Set();
   allCandles.forEach(c => {

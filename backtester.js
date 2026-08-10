@@ -308,7 +308,7 @@ async function backtestPortfolio({
   riskManagement = { stopLossPct: 1.5, takeProfitPct: 5.0 }, // Optimal brackets for Indian Stocks
   fees = { exchangeFeePct: 0, tdsPct: 0, incomeTaxPct: 0 }, // Dhan Flat ₹10 brokerage handled in asset backtester
   tradingWindow = { startHour: 9.0, endHour: 15.0 }, // IST 9:00 AM to 3:00 PM
-  useRealApiData = false, // Always simulated Nifty prices for June/July 2026 backtests
+  useRealApiData = true, // Default to true to pull authentic stock market rates from NSE via Yahoo API
   granularity = 3600
 }) {
   const allCandlesByTicker = {};
@@ -322,7 +322,7 @@ async function backtestPortfolio({
       candles = await fetchCandles(ticker, granularity, start, end);
     }
 
-    if (candles.length === 0) {
+    if (!candles || candles.length === 0) {
       const days = startDate ? Math.ceil((new Date(endDate || Date.now()) - new Date(startDate)) / (24 * 3600 * 1000)) : 180;
       candles = generateSimulatedCandles(ticker, days, granularity);
     }

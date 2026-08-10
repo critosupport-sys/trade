@@ -17,7 +17,7 @@ async function runJuneJuly2026Backtest() {
     strategyName: "PRO_INTRADAY",
     riskManagement: { stopLossPct: 1.5, takeProfitPct: 5.0 },
     tradingWindow: { startHour: 9.0, endHour: 15.0 },
-    useRealApiData: false,
+    useRealApiData: true,
     granularity: 900
   });
 
@@ -38,7 +38,7 @@ async function runJuneJuly2026Backtest() {
     strategyName: "PRO_INTRADAY",
     riskManagement: { stopLossPct: 1.5, takeProfitPct: 5.0 },
     tradingWindow: { startHour: 9.0, endHour: 15.0 },
-    useRealApiData: false,
+    useRealApiData: true,
     granularity: 900
   });
 
