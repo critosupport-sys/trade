@@ -326,14 +326,13 @@ function getProIntradaySignals(candles) {
     }
 
     // 1. PRO BUY/LONG CRITERIA (Golden Trend Breakout):
-    // - Trend structure is bullish: EMA 9 > EMA 21 and Close > EMA 50
-    // - RSI (14) is in rising bullish territory (between 42 and 68)
-    // - Momentum triggers on EMA crossover, price breakout above EMA 9, or RSI breaking above 42
-    // - Volume confirms momentum (at least 90% of rolling average)
-    if (ema9[i] > ema21[i] && closes[i] > ema50[i]) {
-      if (rsi[i] >= 42 && rsi[i] <= 68) {
-        if ((ema9[i-1] <= ema21[i-1] && ema9[i] > ema21[i]) || (closes[i-1] <= ema9[i-1] && closes[i] > ema9[i]) || (rsi[i-1] < 42 && rsi[i] >= 42)) {
-          if (volumes[i] >= avgVolume[i] * 0.9) {
+    // - Relaxed RSI (30 to 78) and broader trigger filters to catch high-quality daily momentum
+    if (ema9[i] > ema21[i]) {
+      if (rsi[i] >= 35 && rsi[i] <= 78) {
+        // Trigger on any active breakout of EMA9 or RSI turning positive
+        if ((ema9[i-1] <= ema21[i-1] && ema9[i] > ema21[i]) || (closes[i-1] <= ema9[i-1] && closes[i] > ema9[i]) || (rsi[i-1] < 38 && rsi[i] >= 38)) {
+          // Relaxed volume filter to 0.4x to guarantee high daily activity
+          if (volumes[i] >= avgVolume[i] * 0.4) {
             signals[i] = 'BUY';
           }
         }
@@ -341,14 +340,10 @@ function getProIntradaySignals(candles) {
     }
 
     // 2. PRO SELL/SHORT CRITERIA (Death Trend Breakdown):
-    // - Trend structure is bearish: EMA 9 < EMA 21 and Close < EMA 50
-    // - RSI (14) is in declining bearish territory (between 32 and 58)
-    // - Momentum triggers on EMA breakdown, price breakout below EMA 9, or RSI breaking below 58
-    // - Volume confirms momentum (at least 90% of rolling average)
-    if (ema9[i] < ema21[i] && closes[i] < ema50[i]) {
-      if (rsi[i] >= 32 && rsi[i] <= 58) {
-        if ((ema9[i-1] >= ema21[i-1] && ema9[i] < ema21[i]) || (closes[i-1] >= ema9[i-1] && closes[i] < ema9[i]) || (rsi[i-1] > 58 && rsi[i] <= 58)) {
-          if (volumes[i] >= avgVolume[i] * 0.9) {
+    if (ema9[i] < ema21[i]) {
+      if (rsi[i] >= 22 && rsi[i] <= 65) {
+        if ((ema9[i-1] >= ema21[i-1] && ema9[i] < ema21[i]) || (closes[i-1] >= ema9[i-1] && closes[i] < ema9[i]) || (rsi[i-1] > 62 && rsi[i] <= 62)) {
+          if (volumes[i] >= avgVolume[i] * 0.4) {
             signals[i] = 'SELL';
           }
         }

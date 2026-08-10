@@ -10,8 +10,9 @@ function isWithinTradingWindow(timestamp, startHour = 9, endHour = 15) {
   // Convert UTC time to IST (UTC + 5:30)
   const utcTime = date.getTime();
   const istTime = new Date(utcTime + (5.5 * 60 * 60 * 1000));
-  const istHour = istTime.getHours();
-  const istMinutes = istTime.getMinutes();
+  // Use getUTCHours and getUTCMinutes to be environment-agnostic (ignores local host timezone offset)
+  const istHour = istTime.getUTCHours();
+  const istMinutes = istTime.getUTCMinutes();
 
   const currentISTDecimal = istHour + istMinutes / 60;
   return currentISTDecimal >= startHour && currentISTDecimal < endHour;
@@ -311,6 +312,7 @@ async function backtestPortfolio({
   granularity = 3600
 }) {
   const allCandlesByTicker = {};
+  const signalsByTicker = {};
 
   for (const ticker of tickers) {
     let candles = [];
@@ -325,34 +327,212 @@ async function backtestPortfolio({
       candles = generateSimulatedCandles(ticker, days, granularity);
     }
     allCandlesByTicker[ticker] = candles;
+
+    // Generate signals for this asset
+    let signalsResult;
+    if (strategyName === 'EMA') {
+      signalsResult = getEMACrossoverSignals(candles, strategyParams.shortPeriod || 9, strategyParams.longPeriod || 21);
+    } else if (strategyName === 'RSI') {
+      signalsResult = getRSIMeanReversionSignals(candles, strategyParams.period || 14, strategyParams.overbought || 70, strategyParams.oversold || 30);
+    } else if (strategyName === 'BB') {
+      signalsResult = getBollingerBandsSignals(candles, strategyParams.period || 20, strategyParams.multiplier || 2);
+    } else if (strategyName === 'PRO_INTRADAY') {
+      signalsResult = getProIntradaySignals(candles);
+    } else {
+      signalsResult = getSuperSelectiveSignals(candles);
+    }
+    signalsByTicker[ticker] = signalsResult.signals;
+  }
+
+  // Find all unique timestamps sorted chronologically
+  const tsSet = new Set();
+  for (const ticker of tickers) {
+    allCandlesByTicker[ticker].forEach(c => tsSet.add(c.time));
+  }
+  const timestamps = Array.from(tsSet).sort((a, b) => a - b);
+
+  // Map each ticker's candles/signals by timestamp for instant lookup
+  const tickerDataByTs = {};
+  for (const ticker of tickers) {
+    tickerDataByTs[ticker] = {};
+    const candles = allCandlesByTicker[ticker];
+    const signals = signalsByTicker[ticker];
+    for (let i = 0; i < candles.length; i++) {
+      tickerDataByTs[ticker][candles[i].time] = {
+        candle: candles[i],
+        signal: signals[i],
+        index: i,
+        closes: candles.map(c => c.close)
+      };
+    }
   }
 
   const startingCapitalInUSD = startingCapitalInINR / USD_INR_RATE;
-  let capitalInUSD = startingCapitalInUSD;
+  let liquidCapitalUSD = startingCapitalInUSD;
+  const activePositions = []; // array of { ticker, type, entryTime, entryPrice, size, entryCostUSD }
+  const allTrades = [];
 
-  const tradeableCapitalRatio = 0.8;
-  const portfolioAllocatedUSD = capitalInUSD * tradeableCapitalRatio;
-  const reserveCapitalUSD = capitalInUSD * (1 - tradeableCapitalRatio);
-  const capitalPerTickerUSD = portfolioAllocatedUSD / tickers.length;
+  const maxConcurrentTrades = 3;
+  const tradeAllocationPct = 0.30; // Allocate 30% of total portfolio value per trade
 
-  let allTrades = [];
-  let finalPortfolioValueUSD = reserveCapitalUSD;
+  // Chronological simulation loop
+  for (const ts of timestamps) {
+    // 1. Calculate current total portfolio equity
+    let activePositionsValueUSD = 0;
+    for (const pos of activePositions) {
+      const data = tickerDataByTs[pos.ticker][ts];
+      if (data) {
+        const currentPrice = data.candle.close;
+        const directionMult = pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1;
+        const priceChangePct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100 * directionMult;
+        activePositionsValueUSD += pos.entryCostUSD + (currentPrice - pos.entryPrice) * pos.size * directionMult;
+      } else {
+        activePositionsValueUSD += pos.entryCostUSD;
+      }
+    }
+    const currentEquityUSD = liquidCapitalUSD + activePositionsValueUSD;
 
-  for (const ticker of tickers) {
-    const candles = allCandlesByTicker[ticker];
-    const result = backtestAsset({
-      ticker,
-      candles,
-      startingCapital: capitalPerTickerUSD,
-      strategyName,
-      strategyParams,
-      riskManagement,
-      fees,
-      tradingWindow
-    });
+    // 2. First, check active positions for exits (Stop Loss, Take Profit, or Force Close)
+    for (let i = activePositions.length - 1; i >= 0; i--) {
+      const pos = activePositions[i];
+      const data = tickerDataByTs[pos.ticker][ts];
+      if (!data) continue;
 
-    allTrades = allTrades.concat(result.trades);
-    finalPortfolioValueUSD += result.finalCapital;
+      const currentPrice = data.candle.close;
+      const directionMult = pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1;
+      const priceChangePct = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100 * directionMult;
+
+      // Volatility-adaptive limits if not explicitly overridden
+      const currentVol = getRollingVolatility(data.closes, data.index, 20);
+      const adaptiveSL = Math.max(0.6, Math.min(2.5, currentVol * 100 * 0.8));
+      const adaptiveTP = Math.max(1.5, Math.min(6.5, adaptiveSL * 2.5));
+
+      const slLimit = riskManagement.stopLossPct !== undefined ? riskManagement.stopLossPct : adaptiveSL;
+      const tpLimit = riskManagement.takeProfitPct !== undefined ? riskManagement.takeProfitPct : adaptiveTP;
+
+      let shouldExit = false;
+      let exitReason = '';
+
+      if (priceChangePct <= -slLimit) {
+        shouldExit = true;
+        exitReason = 'STOP_LOSS';
+      } else if (priceChangePct >= tpLimit) {
+        shouldExit = true;
+        exitReason = 'TAKE_PROFIT';
+      } else if (!isWithinTradingWindow(ts, tradingWindow.startHour, tradingWindow.endHour)) {
+        shouldExit = true;
+        exitReason = 'INTRADAY_FORCE_CLOSE';
+      } else if ((pos.type === 'LONG' || pos.type === 'BUY') && data.signal === 'SELL') {
+        shouldExit = true;
+        exitReason = 'OPPOSING_SIGNAL';
+      } else if (pos.type === 'SHORT' && data.signal === 'BUY') {
+        shouldExit = true;
+        exitReason = 'OPPOSING_SIGNAL';
+      }
+
+      if (shouldExit) {
+        const exitPrice = currentPrice;
+        const pnlBeforeTaxAndFeesINR = (exitPrice - pos.entryPrice) * pos.size * directionMult * USD_INR_RATE;
+        // Flat Dhan app rate: ₹10 round-trip brokerage (₹5 buy, ₹5 sell)
+        const netPnlINR = pnlBeforeTaxAndFeesINR - 10;
+        const netPnlUSD = netPnlINR / USD_INR_RATE;
+
+        liquidCapitalUSD += (pos.entryCostUSD + netPnlUSD);
+
+        allTrades.push({
+          ticker: pos.ticker,
+          type: pos.type,
+          entryTime: pos.entryTime,
+          entryPrice: pos.entryPrice,
+          exitTime: ts,
+          exitPrice,
+          size: pos.size,
+          exitReason,
+          pnlBeforeTaxAndFees: pnlBeforeTaxAndFeesINR / USD_INR_RATE,
+          exchangeFees: 10 / USD_INR_RATE,
+          tds: 0,
+          incomeTax: 0,
+          netPnl: netPnlUSD,
+          capitalAfter: liquidCapitalUSD * USD_INR_RATE
+        });
+
+        activePositions.splice(i, 1);
+      }
+    }
+
+    // 3. Second, check for new entries if space is available (up to maxConcurrentTrades)
+    if (activePositions.length < maxConcurrentTrades && isWithinTradingWindow(ts, tradingWindow.startHour, tradingWindow.endHour)) {
+      for (const ticker of tickers) {
+        if (activePositions.length >= maxConcurrentTrades) break;
+        // Avoid opening duplicate positions on the same asset
+        if (activePositions.some(p => p.ticker === ticker)) continue;
+
+        const data = tickerDataByTs[ticker][ts];
+        if (!data || data.signal === 'HOLD') continue;
+
+        // Friction-Aware Adaptive Filter
+        const currentVol = getRollingVolatility(data.closes, data.index, 20);
+        const expectedSwingPct = currentVol * 100 * 2.0;
+        if (expectedSwingPct < 0.05) continue;
+
+        // Calculate dynamic capital allocation size
+        const targetAllocatedUSD = currentEquityUSD * tradeAllocationPct;
+        const actualAllocationUSD = Math.min(targetAllocatedUSD, liquidCapitalUSD - (5 / USD_INR_RATE)); // reserve flat ₹5 entry fee
+
+        if (actualAllocationUSD > (100 / USD_INR_RATE)) { // require minimum ₹100 trade allocation
+          const entryPrice = data.candle.close;
+          const flatEntryFeeUSD = 5 / USD_INR_RATE;
+          const netAllocatedUSD = actualAllocationUSD - flatEntryFeeUSD;
+          const size = netAllocatedUSD / entryPrice;
+
+          liquidCapitalUSD -= actualAllocationUSD;
+
+          activePositions.push({
+            ticker,
+            type: data.signal === 'BUY' ? 'LONG' : 'SHORT',
+            entryTime: ts,
+            entryPrice,
+            size,
+            entryCostUSD: actualAllocationUSD
+          });
+        }
+      }
+    }
+  }
+
+  // Clean up any remaining open positions at the end of backtest simulation
+  if (activePositions.length > 0) {
+    const finalTs = timestamps[timestamps.length - 1];
+    for (const pos of activePositions) {
+      const data = tickerDataByTs[pos.ticker][finalTs];
+      if (!data) continue;
+
+      const exitPrice = data.candle.close;
+      const directionMult = pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1;
+      const pnlBeforeTaxAndFeesINR = (exitPrice - pos.entryPrice) * pos.size * directionMult * USD_INR_RATE;
+      const netPnlINR = pnlBeforeTaxAndFeesINR - 10;
+      const netPnlUSD = netPnlINR / USD_INR_RATE;
+
+      liquidCapitalUSD += (pos.entryCostUSD + netPnlUSD);
+
+      allTrades.push({
+        ticker: pos.ticker,
+        type: pos.type,
+        entryTime: pos.entryTime,
+        entryPrice: pos.entryPrice,
+        exitTime: finalTs,
+        exitPrice,
+        size: pos.size,
+        exitReason: 'FORCE_BACKTEST_END',
+        pnlBeforeTaxAndFees: pnlBeforeTaxAndFeesINR / USD_INR_RATE,
+        exchangeFees: 10 / USD_INR_RATE,
+        tds: 0,
+        incomeTax: 0,
+        netPnl: netPnlUSD,
+        capitalAfter: liquidCapitalUSD * USD_INR_RATE
+      });
+    }
+    activePositions.length = 0;
   }
 
   allTrades.sort((a, b) => a.entryTime - b.entryTime);
@@ -380,14 +560,14 @@ async function backtestPortfolio({
   const profitableDays = daysList.filter(day => dailyPnL[day].netPnl > 0).length;
   const dailyWinRate = daysList.length > 0 ? (profitableDays / daysList.length) * 100 : 0;
 
-  const finalCapitalInINR = finalPortfolioValueUSD * USD_INR_RATE;
+  const finalCapitalInINR = liquidCapitalUSD * USD_INR_RATE;
   const netProfitInINR = finalCapitalInINR - startingCapitalInINR;
 
   return {
     startingCapitalInINR,
     finalCapitalInINR,
     netProfitInINR,
-    netProfitInUSD: finalPortfolioValueUSD - startingCapitalInUSD,
+    netProfitInUSD: liquidCapitalUSD - startingCapitalInUSD,
     usdInrRate: USD_INR_RATE,
     totalTrades: allTrades.length,
     winningTrades: allTrades.filter(t => t.netPnl > 0).length,

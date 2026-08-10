@@ -182,8 +182,9 @@ async function runTick() {
 
     // Convert to Indian Standard Time (UTC+5:30)
     const istTime = new Date(now + (5.5 * 60 * 60 * 1000));
-    const istHour = istTime.getHours();
-    const istMinutes = istTime.getMinutes();
+    // Use getUTCHours and getUTCMinutes to be environment-agnostic (ignores local host timezone offset)
+    const istHour = istTime.getUTCHours();
+    const istMinutes = istTime.getUTCMinutes();
     const currentISTDecimal = istHour + istMinutes / 60;
     const withinWindow = currentISTDecimal >= botState.tradingWindow.startHour && currentISTDecimal < botState.tradingWindow.endHour;
 
