@@ -1,18 +1,14 @@
 // Technical indicators and strategies module
 const fetch = require('node-fetch');
 
-// Define 100+ popular crypto pairs from Coinbase
+// Define 50+ popular Indian stock tickers (Nifty 50)
 const POPULAR_TICKERS = [
-  "BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "AVAX-USD", "LINK-USD", "MATIC-USD",
-  "SHIB-USD", "LTC-USD", "UNI-USD", "ICP-USD", "NEAR-USD", "FIL-USD", "IMX-USD", "ALGO-USD", "GRT-USD", "RNDR-USD",
-  "STX-USD", "FET-USD", "ATOM-USD", "VET-USD", "HBAR-USD", "AAVE-USD", "OP-USD", "EGLD-USD", "SAND-USD", "MANA-USD",
-  "THETA-USD", "EOS-USD", "XTZ-USD", "FLOW-USD", "FTM-USD", "CHZ-USD", "XEC-USD", "AXS-USD", "MKR-USD", "CRV-USD",
-  "LDO-USD", "MINA-USD", "EGLD-USD", "GALA-USD", "SNX-USD", "ONE-USD", "ANKR-USD", "WOO-USD", "ZIL-USD", "BAT-USD",
-  "JST-USD", "RVN-USD", "KNC-USD", "SUSHI-USD", "YFI-USD", "BAL-USD", "COMP-USD", "ZRX-USD", "OMG-USD", "LRC-USD",
-  "REN-USD", "BAND-USD", "UMA-USD", "RLC-USD", "KAVA-USD", "1INCH-USD", "API3-USD", "ENS-USD", "DYDX-USD", "CELO-USD",
-  "GLMR-USD", "MOVR-USD", "BICO-USD", "ACH-USD", "PERP-USD", "MASK-USD", "STORJ-USD", "GTC-USD", "SPELL-USD", "FORTH-USD",
-  "BOND-USD", "CLV-USD", "QSP-USD", "POWR-USD", "REQ-USD", "REQ-USD", "LCX-USD", "DESO-USD", "POND-USD", "OXT-USD",
-  "MIR-USD", "TRB-USD", "BADGER-USD", "NKN-USD", "POLY-USD", "LOOM-USD", "NMR-USD", "SUPER-USD", "DNT-USD", "CVC-USD"
+  "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "BHARTIARTL", "SBIN", "LICI", "KOTAKBANK", "LT",
+  "ITC", "HINDUNILVR", "AXISBANK", "BAJFINANCE", "MARUTI", "SUNPHARMA", "ADANIENT", "TATAMOTORS", "ONGC", "NTPC",
+  "COALINDIA", "POWERGRID", "JSWSTEEL", "TATASTEEL", "ULTRACEMCO", "TITAN", "GRASIM", "HINDALCO", "NESTLEIND", "TECHM",
+  "ADANIPORTS", "WIPRO", "BPCL", "INDUSINDBK", "BAJAJFINSV", "HDFCLIFE", "SBILIFE", "BRITANNIA", "EICHERMOT", "DIVISLAB",
+  "APOLLOHOSP", "HEROMOTOCO", "CIPLA", "DRREDDY", "LTIM", "TATACONSUM", "JIOFIN", "ADANIPOWER", "HAL", "BEL",
+  "TRENT", "CHOLAFIN", "DLF", "VBL", "SHRIRAMFIN"
 ];
 
 // Technical Indicators
@@ -139,22 +135,88 @@ function calculateBollingerBands(data, period = 20, multiplier = 2) {
   return { middle: sma, upper, lower };
 }
 
-// Fetch historical candles from Coinbase Pro API with intelligent chunking
-// Since Coinbase Pro only returns up to 300 candles per request, this function
-// automatically fetches in sequential chunks to cover the entire range safely
+// Fetch historical candles from Coinbase Pro (for crypto) or Yahoo Finance (for Indian Stocks)
 async function fetchCandles(ticker, granularity = 3600, startTime = null, endTime = null) {
-  const headers = { 'User-Agent': 'Mozilla/5.0' };
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  };
 
   const startMs = startTime ? new Date(startTime).getTime() : Date.now() - 30 * 24 * 3600 * 1000;
   const endMs = endTime ? new Date(endTime).getTime() : Date.now();
 
-  const chunkSpanMs = 300 * granularity * 1000; // Time covered by 300 candles
+  const isStock = POPULAR_TICKERS.includes(ticker) || ticker.endsWith('.NS');
+
+  if (isStock) {
+    const symbol = ticker.endsWith('.NS') ? ticker : `${ticker}.NS`;
+    // Map standard seconds granularity to Yahoo interval strings
+    let interval = '1d';
+    if (granularity === 60) interval = '1m';
+    else if (granularity === 300) interval = '5m';
+    else if (granularity === 900) interval = '15m';
+    else if (granularity === 3600) interval = '1h';
+
+    const p1 = Math.floor(startMs / 1000);
+    const p2 = Math.floor(endMs / 1000);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${p1}&period2=${p2}&interval=${interval}`;
+
+    console.log(`[YAHOO-DATA] Fetching Indian Stock data for ${symbol} from NSE...`);
+    try {
+      const res = await fetch(url, { headers, timeout: 8000 });
+      if (!res.ok) {
+        throw new Error(`Yahoo HTTP Error ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      const result = data.chart?.result?.[0];
+      if (data.chart?.error) {
+        throw new Error(`Yahoo API Error: ${data.chart.error.description || JSON.stringify(data.chart.error)}`);
+      }
+      if (!result || !result.timestamp) {
+        throw new Error("No data returned or empty timestamps array");
+      }
+
+      const timestamps = result.timestamp;
+      const quote = result.indicators?.quote?.[0];
+      if (!quote) throw new Error("No quotes found in Yahoo response");
+
+      const candles = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        // Ensure candle fields are fully valid numbers
+        const open = parseFloat(quote.open?.[i]);
+        const high = parseFloat(quote.high?.[i]);
+        const low = parseFloat(quote.low?.[i]);
+        const close = parseFloat(quote.close?.[i]);
+        const volume = parseFloat(quote.volume?.[i]);
+
+        if (!isNaN(open) && !isNaN(high) && !isNaN(low) && !isNaN(close)) {
+          // Yahoo prices are already in INR, convert to simulated base USD internally
+          // because backtesting framework uses base USD internally and multiplies at the exit
+          const USD_INR_RATE = 83.5;
+          candles.push({
+            time: timestamps[i] * 1000,
+            open: open / USD_INR_RATE,
+            high: high / USD_INR_RATE,
+            low: low / USD_INR_RATE,
+            close: close / USD_INR_RATE,
+            volume: volume || 0
+          });
+        }
+      }
+
+      console.log(`[YAHOO-DATA] Successfully fetched ${candles.length} real NSE stock candles for ${symbol}.`);
+      return candles.sort((a, b) => a.time - b.time);
+    } catch (err) {
+      console.error(`[YAHOO-DATA] Yahoo Finance API fetch failed: ${err.message}.`);
+      return [];
+    }
+  }
+
+  // Fallback / standard Coinbase Pro Fetch for Cryptocurrencies
+  const chunkSpanMs = 300 * granularity * 1000;
   let currentStart = startMs;
   let allCandles = [];
 
   console.log(`[DATA FETCH] Fetching real historical data for ${ticker} from ${new Date(startMs).toLocaleDateString()} to ${new Date(endMs).toLocaleDateString()}...`);
 
-  // Max safety: limit to 25 chunks (~7500 candles) to prevent excessive loading
   let chunksCount = 0;
   while (currentStart < endMs && chunksCount < 25) {
     chunksCount++;
@@ -197,11 +259,10 @@ async function fetchCandles(ticker, granularity = 3600, startTime = null, endTim
     }
 
     if (!success) break;
-    currentStart = currentEnd + 1000; // move start forward by 1s
-    await new Promise(resolve => setTimeout(resolve, 300)); // sleep to prevent rate limiting
+    currentStart = currentEnd + 1000;
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 
-  // Sort and remove duplicates
   const uniqueCandles = [];
   const seenTimes = new Set();
   allCandles.forEach(c => {
@@ -310,6 +371,55 @@ function getSuperSelectiveSignals(candles) {
   return { signals, indicators: { ema9, ema21, ema50, rsi } };
 }
 
+// Professional Intraday Multi-Strategy Signal Generator (No Scalping)
+function getProIntradaySignals(candles) {
+  const closes = candles.map(c => c.close);
+  const volumes = candles.map(c => c.volume);
+
+  const ema9 = calculateEMA(closes, 9);
+  const ema21 = calculateEMA(closes, 21);
+  const ema50 = calculateEMA(closes, 50); // macro trend filter
+  const rsi = calculateRSI(closes, 14);
+  const avgVolume = calculateSMA(volumes, 10); // volume breakout filter
+  const { upper, lower } = calculateBollingerBands(closes, 20, 2);
+
+  const signals = Array(candles.length).fill('HOLD');
+
+  for (let i = 1; i < candles.length; i++) {
+    if (ema9[i] === null || ema21[i] === null || ema50[i] === null || rsi[i] === null || avgVolume[i] === null || upper[i] === null || lower[i] === null) {
+      continue;
+    }
+
+    // 1. PRO BUY/LONG CRITERIA (Golden Trend Breakout):
+    // - Quality check: Price must be above the 50 EMA trend filter.
+    // - Strong momentum: RSI must be in active rising zone (45 to 68) and EMA9 > EMA21.
+    if (ema9[i] > ema21[i] && closes[i] > ema50[i]) {
+      if (rsi[i] >= 45 && rsi[i] <= 68) {
+        if (ema9[i-1] <= ema21[i-1] && ema9[i] > ema21[i]) {
+          if (volumes[i] >= avgVolume[i] * 1.0) {
+            signals[i] = 'BUY';
+          }
+        }
+      }
+    }
+
+    // 2. PRO SELL/SHORT CRITERIA (Death Trend Breakdown):
+    // - Quality check: Price must be below the 50 EMA trend filter.
+    // - Strong momentum: RSI must be in active declining zone (32 to 55) and EMA9 < EMA21.
+    if (ema9[i] < ema21[i] && closes[i] < ema50[i]) {
+      if (rsi[i] >= 32 && rsi[i] <= 55) {
+        if (ema9[i-1] >= ema21[i-1] && ema9[i] < ema21[i]) {
+          if (volumes[i] >= avgVolume[i] * 1.0) {
+            signals[i] = 'SELL';
+          }
+        }
+      }
+    }
+  }
+
+  return { signals, indicators: { ema9, ema21, ema50, rsi, upper, lower } };
+}
+
 module.exports = {
   POPULAR_TICKERS,
   fetchCandles,
@@ -320,5 +430,6 @@ module.exports = {
   getEMACrossoverSignals,
   getRSIMeanReversionSignals,
   getBollingerBandsSignals,
-  getSuperSelectiveSignals
+  getSuperSelectiveSignals,
+  getProIntradaySignals
 };

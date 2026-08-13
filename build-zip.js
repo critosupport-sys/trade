@@ -51,7 +51,8 @@ function packageProject() {
     'HOW_TO_USE.md',
     'test-strategies.js',
     'test-backtester.js',
-    'test-persistence.js'
+    'test-persistence.js',
+    'backtest-june-july-2026.js'
   ];
 
   filesToAdd.forEach(file => {

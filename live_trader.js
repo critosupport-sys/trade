@@ -1,7 +1,7 @@
 // Live/Demo Paper and Actual Trading Module
 const fs = require('fs');
 const fetch = require('node-fetch');
-const { fetchCandles, getEMACrossoverSignals, getRSIMeanReversionSignals, getBollingerBandsSignals, getSuperSelectiveSignals } = require('./strategies');
+const { fetchCandles, getEMACrossoverSignals, getRSIMeanReversionSignals, getBollingerBandsSignals, getSuperSelectiveSignals, getProIntradaySignals } = require('./strategies');
 
 const STATE_FILE = 'bot_state.json';
 const USD_INR_RATE = 83.5;
@@ -20,13 +20,13 @@ let botState = {
   actualTradeHistory: [],
 
   apiConfig: {
-    exchange: 'binance_demo',
+    exchange: 'dhan',
     apiKey: '',
     apiSecret: ''
   },
-  tradingWindow: { startHour: 0, endHour: 24 },
+  tradingWindow: { startHour: 9, endHour: 15 }, // IST 9:00 AM to 3:00 PM
   strategyConfig: {
-    strategyName: 'SELECTIVE', // Default to super selective trend strategy
+    strategyName: 'SELECTIVE', // Default to professional selective strategy for high-frequency stock trades
     shortPeriod: 9,
     longPeriod: 21,
     period: 14,
@@ -35,12 +35,12 @@ let botState = {
     bbPeriod: 20,
     bbMultiplier: 2.0,
     stopLossPct: 2.0,
-    takeProfitPct: 8.0 // High-target 8% baseline to out-climb Indian TDS/fees
+    takeProfitPct: 0.8
   },
   fees: {
-    exchangeFeePct: 0.1,
-    tdsPct: 1.0,
-    incomeTaxPct: 30.0
+    exchangeFeePct: 0.0,
+    tdsPct: 0.0,
+    incomeTaxPct: 0.0
   }
 };
 
@@ -127,11 +127,12 @@ async function placeSpotOrder(ticker, type, price, sizeInUSD, isActual = false) 
     console.log(`[LIVE ACTUAL EXCHANGE] Connected successfully to API Server (${botState.apiConfig.exchange}).`);
     console.log(`[LIVE ACTUAL EXCHANGE] Order transmitted: ${type} ${ticker} - Spot Spot (No Leverage)`);
   } else {
-    console.log(`[SIMULATION PAPER API] Order matched on Coinbase feed: ${type} ${ticker} - Spot Spot`);
+    console.log(`[SIMULATION PAPER API] Order matched on Dhan feed: ${type} ${ticker} - Spot Spot`);
   }
 
   const allocCapitalINR = sizeInUSD * botState.usdInrRate;
-  const entryFeeUSD = sizeInUSD * (botState.fees.exchangeFeePct / 100);
+  const entryFeeINR = 5.0; // Dhan flat ₹5 entry brokerage
+  const entryFeeUSD = entryFeeINR / botState.usdInrRate;
   const netUSD = sizeInUSD - entryFeeUSD;
   const size = netUSD / price;
 
@@ -142,7 +143,7 @@ async function placeSpotOrder(ticker, type, price, sizeInUSD, isActual = false) 
     entryPrice: price,
     size,
     entryCostINR: allocCapitalINR,
-    entryFeeINR: entryFeeUSD * botState.usdInrRate,
+    entryFeeINR: entryFeeINR,
     currentPrice: price,
     unrealizedPnl: 0
   };
@@ -178,10 +179,16 @@ async function runTick() {
   try {
     const now = Date.now();
     const dateObj = new Date(now);
-    const currentHour = dateObj.getUTCHours();
-    const withinWindow = currentHour >= botState.tradingWindow.startHour && currentHour < botState.tradingWindow.endHour;
 
-    console.log(`[TICK] Running trade tick at ${dateObj.toISOString()}. Hours: ${currentHour} UTC. Within trading window: ${withinWindow}`);
+    // Convert to Indian Standard Time (UTC+5:30)
+    const istTime = new Date(now + (5.5 * 60 * 60 * 1000));
+    // Use getUTCHours and getUTCMinutes to be environment-agnostic (ignores local host timezone offset)
+    const istHour = istTime.getUTCHours();
+    const istMinutes = istTime.getUTCMinutes();
+    const currentISTDecimal = istHour + istMinutes / 60;
+    const withinWindow = currentISTDecimal >= botState.tradingWindow.startHour && currentISTDecimal < botState.tradingWindow.endHour;
+
+    console.log(`[TICK] Running trade tick at ${dateObj.toISOString()} (IST ${istHour}:${istMinutes}). Within trading window: ${withinWindow}`);
 
     const isActualTradingMode = botState.apiConfig.exchange !== 'binance_demo' && botState.apiConfig.apiKey;
 
@@ -260,7 +267,7 @@ async function runTick() {
       lastScanTime = now;
       console.log(`[SCANNING] 60-second scan throttle window reached. Fetching macro candlestick indicators...`);
 
-      const tickersToScan = ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "DOT-USD"];
+      const tickersToScan = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"];
 
       for (const ticker of tickersToScan) {
         let isPaperAllowed = botState.activePositions.length < MAX_POSITIONS && botState.capitalInINR > 500 && !botState.activePositions.find(p => p.ticker === ticker);
@@ -283,23 +290,28 @@ async function runTick() {
         if (signal === 'BUY' || signal === 'SELL') {
           const currentVol = calculateCurrentVolatility(candles);
           const expectedSwingPct = currentVol * 100 * 2.0;
-          const isFrictionTrap = expectedSwingPct < 1.5;
+          const isFrictionTrap = expectedSwingPct < 0.05; // lower friction threshold for Indian stock market
 
           if (isFrictionTrap) {
-            console.log(`[SCANNER] Ticker ${ticker} signal skipped: Expected volatility swing (${expectedSwingPct.toFixed(2)}%) is too low to beat Indian tax/fee friction.`);
+            console.log(`[SCANNER] Ticker ${ticker} signal skipped: Expected volatility swing (${expectedSwingPct.toFixed(2)}%) is too low to beat Indian stock market friction.`);
             continue;
           }
 
+          // Enforce strict limit of maximum 5 trades per calendar day
+          const todayStr = new Date(now + (5.5 * 3600 * 1000)).toISOString().slice(0, 10);
+          const paperTradesToday = botState.tradeHistory.filter(t => new Date(t.entryTime + (5.5 * 3600 * 1000)).toISOString().slice(0, 10) === todayStr).length + botState.activePositions.length;
+          const actualTradesToday = botState.actualTradeHistory.filter(t => new Date(t.entryTime + (5.5 * 3600 * 1000)).toISOString().slice(0, 10) === todayStr).length + botState.actualActivePositions.length;
+
           const livePrice = await fetchLivePrice(ticker);
           if (livePrice) {
-            // Place Paper Position
-            if (isPaperAllowed) {
+            // Place Paper Position if under daily max 5 limit
+            if (isPaperAllowed && paperTradesToday < 5) {
               const allocCapitalINR = (botState.capitalInINR * 0.8) / (MAX_POSITIONS - botState.activePositions.length);
               const allocUSD = allocCapitalINR / botState.usdInrRate;
               await placeSpotOrder(ticker, signal, livePrice, allocUSD, false);
             }
-            // Place Actual Position
-            if (isActualAllowed) {
+            // Place Actual Position if under daily max 5 limit
+            if (isActualAllowed && actualTradesToday < 5) {
               const allocCapitalINR = (botState.actualCapitalInINR * 0.8) / (MAX_POSITIONS - botState.actualActivePositions.length);
               const allocUSD = allocCapitalINR / botState.usdInrRate;
               await placeSpotOrder(ticker, signal, livePrice, allocUSD, true);
@@ -328,6 +340,9 @@ function getActiveSignalForCandles(candles) {
   } else if (botState.strategyConfig.strategyName === 'BB') {
     const { signals } = getBollingerBandsSignals(candles, botState.strategyConfig.bbPeriod, botState.strategyConfig.bbMultiplier);
     signal = signals[signals.length - 1];
+  } else if (botState.strategyConfig.strategyName === 'PRO_INTRADAY') {
+    const { signals } = getProIntradaySignals(candles);
+    signal = signals[signals.length - 1];
   } else {
     const { signals } = getSuperSelectiveSignals(candles);
     signal = signals[signals.length - 1];
@@ -338,12 +353,10 @@ function getActiveSignalForCandles(candles) {
 async function closePosition(pos, reason, isActual = false) {
   const exitPrice = pos.currentPrice;
   const grossUSD = pos.size * exitPrice;
-  const exitExchangeFeeUSD = grossUSD * (botState.fees.exchangeFeePct / 100);
-  const tdsUSD = grossUSD * (botState.fees.tdsPct / 100);
-
   const grossINR = grossUSD * botState.usdInrRate;
-  const exitExchangeFeeINR = exitExchangeFeeUSD * botState.usdInrRate;
-  const tdsINR = tdsUSD * botState.usdInrRate;
+
+  const exitExchangeFeeINR = 5.0; // Dhan flat ₹5 exit fee
+  const tdsINR = 0.0; // 0% TDS for stock market
 
   const directionMult = pos.type === 'LONG' || pos.type === 'BUY' ? 1 : -1;
   const netExitINR = directionMult === 1
@@ -351,12 +364,9 @@ async function closePosition(pos, reason, isActual = false) {
     : (pos.entryCostINR + (pos.entryCostINR - grossINR) - exitExchangeFeeINR - tdsINR);
 
   const pnlBeforeTaxAndFees = (exitPrice - pos.entryPrice) * pos.size * botState.usdInrRate * directionMult;
-  const netPnl = netExitINR - pos.entryCostINR;
+  const netPnl = pnlBeforeTaxAndFees - (pos.entryFeeINR + exitExchangeFeeINR); // gross INR profit - ₹10 total Dhan fees
 
-  let incomeTax = 0;
-  if (netPnl > 0) {
-    incomeTax = netPnl * (botState.fees.incomeTaxPct / 100);
-  }
+  let incomeTax = 0; // 0% flat tax for stock market simulation
 
   const finalNetPnl = netPnl - incomeTax;
   const returnedCapital = pos.entryCostINR + finalNetPnl;
